@@ -1,18 +1,21 @@
 // Copyright (c) 2026 Michael Liang
 // SPDX-License-Identifier: MIT
 
-const canvas = document.querySelector<HTMLCanvasElement>('#app');
-const statusEl = document.querySelector<HTMLElement>('#status');
-
-if (!canvas || !statusEl) {
-  throw new Error('Expected #app canvas and #status element in index.html');
+function requireElement<T extends Element>(selector: string): T {
+  const el = document.querySelector<T>(selector);
+  if (!el) {
+    throw new Error(`Expected element ${selector} in index.html`);
+  }
+  return el;
 }
+
+const statusEl = requireElement<HTMLElement>('#status');
 
 type StatusTone = 'info' | 'error';
 
 function setStatus(message: string, tone: StatusTone = 'info'): void {
-  statusEl!.textContent = message;
-  statusEl!.dataset['tone'] = tone;
+  statusEl.textContent = message;
+  statusEl.dataset['tone'] = tone;
 }
 
 async function initWebGpu(): Promise<GPUDevice | null> {
