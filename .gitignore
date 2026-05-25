@@ -183,6 +183,17 @@ typedoc/
 api-docs/
 
 # ============================================================
+# Obsidian vaults (pharos-notes/, etc.)
+# ============================================================
+# Per-user / per-machine UI state that changes on every interaction.
+# Commit the notes and shared vault config; ignore the local layout.
+**/.obsidian/workspace.json
+**/.obsidian/workspace-mobile.json
+**/.obsidian/graph.json
+**/.obsidian/cache/
+**/.trash/
+
+# ============================================================
 # Misc
 # ============================================================
 *.tmp
