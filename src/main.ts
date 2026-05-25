@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Michael Liang
+// SPDX-License-Identifier: MIT
+
 const canvas = document.querySelector<HTMLCanvasElement>('#app');
 
 if (!canvas) {
