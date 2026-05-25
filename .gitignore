@@ -1,28 +1,191 @@
-# Angular specific
-/dist/
-/out-tsc/
-/tmp/
-/coverage/
-/e2e/test-output/
-/.angular/
-.angular/
+# ============================================================
+# Pharos — WebGPU game engine
+# ============================================================
 
-# Node modules and dependency files
-/node_modules/
-/package-lock.json
-/yarn.lock
-
-# Environment files
-/.env
-
-# Angular CLI and build artefacts
-/.angular-cli.json
-/.ng/
-
-# TypeScript cache
-*.tsbuildinfo
-
-# Logs
+# ---------- Node / npm / pnpm / yarn ----------
+node_modules/
+.pnp
+.pnp.*
+.yarn/cache
+.yarn/unplugged
+.yarn/build-state.log
+.yarn/install-state.gz
+.pnpm-store/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Lockfiles: KEEP one, remove the others depending on your package manager.
+# (delete the lines below for whichever lockfile you DO want to commit)
+# package-lock.json
+# yarn.lock
+# pnpm-lock.yaml
+
+# ---------- Build output ----------
+dist/
+build/
+out/
+.output/
+.next/
+.nuxt/
+.svelte-kit/
+.vercel/
+.netlify/
+.turbo/
+.parcel-cache/
+.rollup.cache/
+.cache/
+*.tsbuildinfo
+
+# ---------- Vite ----------
+.vite/
+vite.config.*.timestamp-*
+
+# ---------- TypeScript ----------
+*.tsbuildinfo
+.tsbuildinfo
+
+# ---------- Testing ----------
+coverage/
+*.lcov
+.nyc_output/
+.vitest-cache/
+.jest-cache/
+playwright-report/
+test-results/
+playwright/.cache/
+
+# ---------- Linters / formatters ----------
+.eslintcache
+.stylelintcache
+.prettiercache
+
+# ---------- Environment / secrets ----------
+.env
+.env.*
+!.env.example
+!.env.sample
+*.pem
+*.key
+secrets.json
+
+# ---------- Editors / IDEs ----------
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+.idea/
+*.swp
+*.swo
+*.sublime-workspace
+*.sublime-project
+.history/
+
+# ---------- OS junk ----------
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+$RECYCLE.BIN/
+
+# ---------- Logs / debug ----------
+logs/
+*.log
+debug.log
+report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
+
+# ---------- Local dev / scratch ----------
+tmp/
+temp/
+.scratch/
+scratch/
+TODO.local.md
+NOTES.local.md
+
+# ============================================================
+# Game-engine specific
+# ============================================================
+
+# ---------- Generated/baked assets ----------
+# Keep source assets (in e.g. assets/source/) committed; ignore the
+# baked/compressed outputs of your asset pipeline.
+assets/baked/
+assets/dist/
+assets/compressed/
+*.ktx2.bak
+*.basis.bak
+
+# Large binary asset formats — uncomment if you're NOT using Git LFS.
+# If you ARE using Git LFS, leave these tracked and configure .gitattributes.
+# *.fbx
+# *.blend
+# *.blend1
+# *.psd
+# *.exr
+# *.hdr
+# *.tga
+# *.wav
+# *.flac
+# *.aif
+# *.mp4
+# *.mov
+
+# Blender autosaves
+*.blend1
+*.blend2
+*.blend@
+
+# Generated shader caches / reflection data
+.shadercache/
+*.spv.cache
+*.wgsl.cache
+
+# Generated TypeScript bindings from WGSL (if you set this up later)
+src/generated/
+
+# ---------- Profiling / captures ----------
+*.gpucapture
+*.rgp
+*.nvprof
+*.rdc
+captures/
+profiles/
+
+# ============================================================
+# Rust / wgpu (for future native port — safe to keep now)
+# ============================================================
+target/
+**/*.rs.bk
+Cargo.lock.bak
+# Note: commit Cargo.lock for binaries, ignore it for libraries.
+# Decide later; default here is to keep it tracked.
+
+# ============================================================
+# WebAssembly artifacts (Rapier physics, etc.)
+# ============================================================
+pkg/
+*.wasm.map
+wasm-pack.log
+
+# ============================================================
+# Documentation build output
+# ============================================================
+docs/.vitepress/dist/
+docs/.vitepress/cache/
+typedoc/
+api-docs/
+
+# ============================================================
+# Misc
+# ============================================================
+*.tmp
+*.bak
+*.orig
+.history/
