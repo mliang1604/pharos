@@ -72,7 +72,8 @@ function sizeCanvasToDisplay(canvas: HTMLCanvasElement, device: GPUDevice): void
 function startClearLoop(
   device: GPUDevice,
   context: GPUCanvasContext,
-  pipeline: GPURenderPipeline
+  pipeline: GPURenderPipeline,
+  vertexBuffer: GPUBuffer
 ): void {
   const startTime = performance.now();
 
@@ -95,6 +96,7 @@ function startClearLoop(
       ],
     });
     pass.setPipeline(pipeline);
+    pass.setVertexBuffer(0, vertexBuffer);
     pass.draw(3);
     pass.end();
     device.queue.submit([encoder.finish()]);
@@ -120,17 +122,26 @@ if (device) {
       alphaMode: 'opaque',
     });
 
+    // Vertex Data and Vertex Buffer
+    // Write the buffer
+    const vertexData = new Float32Array([
+      0.0, 0.5, // top
+      -0.5, -0.5, // bottom left
+      0.5, -0.5, // bottom right 
+    ]);
+    const vertexBuffer = device.createBuffer({
+      label: 'triangle vertices',
+      size: vertexData.byteLength,
+      usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
+    });
+    device.queue.writeBuffer(vertexBuffer, 0, vertexData);
+
     const shaderModule = device.createShaderModule({
       label: 'triangle shaders',
       code: `
         @vertex
-        fn vs_main(@builtin(vertex_index) index: u32) -> @builtin(position) vec4<f32> {
-          let positions = array<vec2<f32>, 3>(
-            vec2<f32>(0.0, 0.5),
-            vec2<f32>(-0.5, -0.5),
-            vec2<f32>(0.5, -0.5)
-          );
-          return vec4<f32>(positions[index], 0.0, 1.0);
+        fn vs_main(@location(0) position: vec2<f32>) -> @builtin(position) vec4<f32> {
+          return vec4<f32>(position, 0.0, 1.0);
         }
 
         @fragment
@@ -146,6 +157,18 @@ if (device) {
       vertex: {
         module: shaderModule,
         entryPoint: 'vs_main',
+        buffers: [
+          {
+            arrayStride: 8, // 2 floats * 4 bytes per float
+            attributes: [
+              {
+                shaderLocation: 0,           // matches @location(0) in the shader
+                offset: 0,                   // this attribute starts at byte 0 of each vertex
+                format: 'float32x2',         // 2 × 32-bit floats = our (x, y)
+              }
+            ],
+          }
+        ],
       },
       fragment: {
         module: shaderModule,
@@ -157,7 +180,7 @@ if (device) {
       },
     });
 
-    startClearLoop(device, context, pipeline);
+    startClearLoop(device, context, pipeline, vertexBuffer);
     setStatus(`Pharos — clearing at ${format}, and drawing a triangle.`);
   }
 }
