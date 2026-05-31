@@ -16,6 +16,25 @@ const statusEl = requireElement<HTMLElement>('#status');
 
 type StatusTone = 'info' | 'error';
 
+function generateCheckerboardTexture(): [number, Uint8Array<ArrayBuffer>] {
+  const texSize = 256;
+  const texData = new Uint8Array(texSize * texSize * 4); // RGBA, 4 bytes per pixel
+  const color1: [number, number, number] = [0, 0, 0];
+  const color2: [number, number, number] = [255, 255, 255];
+  for (let y = 0; y < texSize; y++) {
+    for (let x = 0; x < texSize; x++) {
+      const checker = (Math.floor(x / 32) + Math.floor(y / 32)) % 2; // 32px squares
+      const [r, g, b] = checker === 0 ? color1 : color2;
+      const i = (y * texSize + x) * 4;
+      texData[i] = r;
+      texData[i + 1] = g;
+      texData[i + 2] = b;
+      texData[i + 3] = 255; // alpha
+    }
+  }
+  return [texSize, texData];
+}
+
 function setStatus(message: string, tone: StatusTone = 'info'): void {
   statusEl.textContent = message;
   statusEl.dataset['tone'] = tone;
@@ -156,6 +175,21 @@ function initScene(device: GPUDevice, context: GPUCanvasContext): void {
     alphaMode: 'opaque',
   });
 
+  const [texSize, texData] = generateCheckerboardTexture();
+  const texture = device.createTexture({
+    label: 'cube texture',
+    size: [texSize, texSize],
+    format: 'rgba8unorm',
+    usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
+  });
+  device.queue.writeTexture({ texture }, texData, { bytesPerRow: texSize * 4 }, [texSize, texSize]);
+
+  const sampler = device.createSampler({
+    label: 'cube sampler',
+    magFilter: 'linear',
+    minFilter: 'linear',
+  });
+
   // Adds depth texture
   const depthTexture = device.createTexture({
     label: 'cube depth texture',
@@ -225,6 +259,8 @@ function initScene(device: GPUDevice, context: GPUCanvasContext): void {
       };
 
       @group(0) @binding(0) var<uniform> mvpMatrix: mat4x4<f32>;
+      @group(0) @binding(1) var cubeTexture: texture_2d<f32>;
+      @group(0) @binding(2) var cubeSampler: sampler;
 
       @vertex
       fn vs_main(@location(0) position: vec3<f32>, @location(1) uv: vec2<f32>) -> VertexOutput {
@@ -236,10 +272,7 @@ function initScene(device: GPUDevice, context: GPUCanvasContext): void {
 
       @fragment
       fn fs_main(@location(0) uv: vec2<f32>) -> @location(0) vec4<f32> {
-        let purple = vec3<f32>(0.5, 0.0, 0.9);
-        let blue = vec3<f32>(0.0, 0.3, 0.9);
-        let color = mix(purple, blue, uv.y);
-        return vec4<f32>(color, 1.0);
+        return textureSample(cubeTexture, cubeSampler, uv);
       }
     `,
   });
@@ -292,6 +325,14 @@ function initScene(device: GPUDevice, context: GPUCanvasContext): void {
         resource: {
           buffer: uniformBuffer,
         },
+      },
+      {
+        binding: 1,
+        resource: texture.createView(),
+      },
+      {
+        binding: 2,
+        resource: sampler,
       },
     ],
   });
