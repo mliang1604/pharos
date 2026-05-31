@@ -1,6 +1,8 @@
 // Copyright (c) 2026 Michael Liang
 // SPDX-License-Identifier: MIT
 
+import { mat4 } from 'wgpu-matrix';
+
 function requireElement<T extends Element>(selector: string): T {
   const el = document.querySelector<T>(selector);
   if (!el) {
@@ -69,23 +71,51 @@ function sizeCanvasToDisplay(canvas: HTMLCanvasElement, device: GPUDevice): void
   canvas.height = height;
 }
 
-function startClearLoop(
+function startRenderLoop(
   device: GPUDevice,
   context: GPUCanvasContext,
   pipeline: GPURenderPipeline,
-  vertexBuffer: GPUBuffer
+  vertexBuffer: GPUBuffer,
+  indexBuffer: GPUBuffer,
+  indexCount: number,
+  uniformBuffer: GPUBuffer,
+  bindGroup: GPUBindGroup
 ): void {
   const startTime = performance.now();
+  const mvpData = new Float32Array(16); // 4x4 matrix
 
   function frame(): void {
     const elapsed = (performance.now() - startTime) / 1000;
+    const angle = elapsed;
+
+    // Build the MVP matrix
+    const aspect = canvas.width / canvas.height;
+    const project = mat4.perspective(
+      (60 * Math.PI) / 180, // vertical field of view in radians
+      aspect,
+      0.1, // near plane
+      100.0 // far plane
+    );
+    const view = mat4.lookAt(
+      [0, 0, 5], // camera position
+      [0, 0, 0], // look at position
+      [0, 1, 0] // up vector
+    );
+    const model = mat4.rotationY(angle);
+    mat4.rotateX(model, angle * 0.5, model);
+
+    mat4.multiply(project, mat4.multiply(view, model), mvpData);
+    device.queue.writeBuffer(uniformBuffer, 0, mvpData);
+
+    // Color-changing background
     const r = 0.5 + 0.5 * Math.sin(elapsed * 0.7);
     const g = 0.5 + 0.5 * Math.sin(elapsed * 1.1 + 2.0);
     const b = 0.5 + 0.5 * Math.sin(elapsed * 1.3 + 4.0);
 
+    // Open a render pass
     const encoder = device.createCommandEncoder({ label: 'frame encoder' });
     const pass = encoder.beginRenderPass({
-      label: 'clear pass',
+      label: 'cube pass',
       colorAttachments: [
         {
           view: context.getCurrentTexture().createView(),
@@ -95,12 +125,15 @@ function startClearLoop(
         },
       ],
     });
+
+    // Draw the cube
     pass.setPipeline(pipeline);
+    pass.setBindGroup(0, bindGroup);
     pass.setVertexBuffer(0, vertexBuffer);
-    pass.draw(3);
+    pass.setIndexBuffer(indexBuffer, 'uint16');
+    pass.drawIndexed(indexCount);
     pass.end();
     device.queue.submit([encoder.finish()]);
-
     requestAnimationFrame(frame);
   }
 
@@ -122,52 +155,129 @@ if (device) {
       alphaMode: 'opaque',
     });
 
-    // Vertex Data and Vertex Buffer
-    // Write the buffer
-    const vertexData = new Float32Array([
-      0.0, 0.5, // top
-      -0.5, -0.5, // bottom left
-      0.5, -0.5, // bottom right 
+    // Vertex Data and Vertex Buffer for a Cube
+    // 24 vertices: 4 per face, each = [x, y, z,  u, v]
+    const cubeVertexData = new Float32Array([
+      // +Z (front)
+      -1, -1, 1, 0, 1, 1, -1, 1, 1, 1, 1, 1, 1, 1, 0, -1, 1, 1, 0, 0,
+      // -Z (back)
+      1, -1, -1, 0, 1, -1, -1, -1, 1, 1, -1, 1, -1, 1, 0, 1, 1, -1, 0, 0,
+      // -X (left)
+      -1, -1, -1, 0, 1, -1, -1, 1, 1, 1, -1, 1, 1, 1, 0, -1, 1, -1, 0, 0,
+      // +X (right)
+      1, -1, 1, 0, 1, 1, -1, -1, 1, 1, 1, 1, -1, 1, 0, 1, 1, 1, 0, 0,
+      // +Y (top)
+      -1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, -1, 1, 0, -1, 1, -1, 0, 0,
+      // -Y (bottom)
+      -1, -1, -1, 0, 1, 1, -1, -1, 1, 1, 1, -1, 1, 1, 0, -1, -1, 1, 0, 0,
     ]);
-    const vertexBuffer = device.createBuffer({
-      label: 'triangle vertices',
-      size: vertexData.byteLength,
+    // 36 indices: 2 triangles per face. For face f, corners are f*4 + (0,1,2,3).
+    const cubeIndexData = new Uint16Array([
+      0,
+      1,
+      2,
+      0,
+      2,
+      3, // +Z
+      4,
+      5,
+      6,
+      4,
+      6,
+      7, // -Z
+      8,
+      9,
+      10,
+      8,
+      10,
+      11, // -X
+      12,
+      13,
+      14,
+      12,
+      14,
+      15, // +X
+      16,
+      17,
+      18,
+      16,
+      18,
+      19, // +Y
+      20,
+      21,
+      22,
+      20,
+      22,
+      23, // -Y
+    ]);
+
+    const cubeVertexBuffer = device.createBuffer({
+      label: 'cube vertices',
+      size: cubeVertexData.byteLength,
       usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
     });
-    device.queue.writeBuffer(vertexBuffer, 0, vertexData);
+    device.queue.writeBuffer(cubeVertexBuffer, 0, cubeVertexData);
+
+    const cubeIndexBuffer = device.createBuffer({
+      label: 'cube indices',
+      size: cubeIndexData.byteLength,
+      usage: GPUBufferUsage.INDEX | GPUBufferUsage.COPY_DST,
+    });
+    device.queue.writeBuffer(cubeIndexBuffer, 0, cubeIndexData);
+
+    const uniformBuffer = device.createBuffer({
+      label: 'uniform cube',
+      size: 64, // 4x4 matrix of 32-bit floats
+      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+    });
 
     const shaderModule = device.createShaderModule({
-      label: 'triangle shaders',
+      label: 'cube shaders',
       code: `
+        struct VertexOutput {
+          @builtin(position) clipPosition: vec4<f32>,  // required: the clip-space position of the vertex
+          @location(0) fragUV: vec2<f32>,             // extra: interpolated UV coordinates to pass to the fragment shader
+        };
+
+        @group(0) @binding(0) var<uniform> mvpMatrix: mat4x4<f32>;
+
         @vertex
-        fn vs_main(@location(0) position: vec2<f32>) -> @builtin(position) vec4<f32> {
-          return vec4<f32>(position, 0.0, 1.0);
+        fn vs_main(@location(0) position: vec3<f32>, @location(1) uv: vec2<f32>) -> VertexOutput {
+          var output: VertexOutput;
+          output.clipPosition = mvpMatrix * vec4<f32>(position, 1.0);
+          output.fragUV = uv;
+          return output;
         }
 
         @fragment
-        fn fs_main() -> @location(0) vec4<f32> {
-          return vec4<f32>(1.0, 0.0, 0.0, 1.0);
+        fn fs_main(@location(0) uv: vec2<f32>) -> @location(0) vec4<f32> {
+          return vec4<f32>(uv, 0.5 + 0.5 * sin(uv.x * 10.0), 1.0);
         }
       `,
     });
 
     const pipeline = device.createRenderPipeline({
-      label: 'triangle pipeline',
+      label: 'cube pipeline',
       layout: 'auto',
       vertex: {
         module: shaderModule,
         entryPoint: 'vs_main',
         buffers: [
           {
-            arrayStride: 8, // 2 floats * 4 bytes per float
+            arrayStride: 20, // 5 floats * 4 bytes per float
             attributes: [
               {
-                shaderLocation: 0,           // matches @location(0) in the shader
-                offset: 0,                   // this attribute starts at byte 0 of each vertex
-                format: 'float32x2',         // 2 × 32-bit floats = our (x, y)
-              }
+                shaderLocation: 0, // matches @location(0) in the shader
+                offset: 0, // this attribute starts at byte 0 of each vertex
+                format: 'float32x3', // 3 × 32-bit floats = our (x, y, z)
+              },
+              {
+                shaderLocation: 1, // matches @location(1) in the shader
+                offset: 12, // this attribute starts at byte 12 of each vertex
+                format: 'float32x2', // 2 × 32-bit floats = our (u, v)
+              },
             ],
-          }
+          },
         ],
       },
       fragment: {
@@ -180,7 +290,29 @@ if (device) {
       },
     });
 
-    startClearLoop(device, context, pipeline, vertexBuffer);
-    setStatus(`Pharos — clearing at ${format}, and drawing a triangle.`);
+    const uniformBindGroup = device.createBindGroup({
+      label: 'mvp bind group',
+      layout: pipeline.getBindGroupLayout(0), // the auto-inferred layout for @group(0)
+      entries: [
+        {
+          binding: 0,
+          resource: {
+            buffer: uniformBuffer,
+          },
+        },
+      ],
+    });
+
+    startRenderLoop(
+      device,
+      context,
+      pipeline,
+      cubeVertexBuffer,
+      cubeIndexBuffer,
+      cubeIndexData.length,
+      uniformBuffer,
+      uniformBindGroup
+    );
+    setStatus(`Pharos — clearing at ${format}, and drawing a cube.`);
   }
 }
