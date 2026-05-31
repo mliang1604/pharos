@@ -1,7 +1,7 @@
 // Copyright (c) 2026 Michael Liang
 // SPDX-License-Identifier: MIT
 
-import { mat4 } from 'wgpu-matrix';
+import { mat4 } from '@/math';
 import { createHud } from './debug/hud';
 
 function requireElement<T extends Element>(selector: string): T {
