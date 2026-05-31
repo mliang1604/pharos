@@ -1,5 +1,8 @@
-# Issue 4 - Canvas Context and Clear Color
-
+---
+tags:
+  - notes
+phase: "0"
+---
 A friendly walkthrough for someone who has never touched WebGPU (or any graphics API) before. Pairs with [[Issue 3 - WebGPU Init]], which covered how we got hold of the `GPUDevice` in the first place.
 
 ## What we built

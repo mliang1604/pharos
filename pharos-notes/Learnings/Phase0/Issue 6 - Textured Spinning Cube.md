@@ -1,5 +1,8 @@
-# Issue 6 - Textured Spinning Cube
-
+---
+tags:
+  - notes
+phase: "0"
+---
 The "hello cube" milestone — the first time everything comes together into something that actually looks 3D. Pairs with [[Issue 5 - Hardcoded Triangle]], which drew a single flat triangle whose corners were hardcoded in the shader. This issue is a big jump: real geometry in memory, a 3D camera, depth, and a texture.
 
 ## What we built

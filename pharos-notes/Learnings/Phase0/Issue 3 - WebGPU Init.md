@@ -1,5 +1,8 @@
-# Issue 3 - WebGPU Init
-
+---
+tags:
+  - notes
+phase: "0"
+---
 Notes from PR #83 (`feature/3_WebGpuDeviceInit`). The transferable concepts, not a line-by-line file dump.
 
 ## WebGPU's three-step boot
