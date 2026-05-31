@@ -79,7 +79,8 @@ function startRenderLoop(
   indexBuffer: GPUBuffer,
   indexCount: number,
   uniformBuffer: GPUBuffer,
-  bindGroup: GPUBindGroup
+  bindGroup: GPUBindGroup,
+  depthTexture: GPUTexture
 ): void {
   const startTime = performance.now();
   const mvpData = new Float32Array(16); // 4x4 matrix
@@ -124,6 +125,12 @@ function startRenderLoop(
           storeOp: 'store',
         },
       ],
+      depthStencilAttachment: {
+        view: depthTexture.createView(),
+        depthClearValue: 1.0,
+        depthLoadOp: 'clear',
+        depthStoreOp: 'store',
+      },
     });
 
     // Draw the cube
@@ -140,6 +147,169 @@ function startRenderLoop(
   requestAnimationFrame(frame);
 }
 
+function initScene(device: GPUDevice, context: GPUCanvasContext): void {
+  const format = navigator.gpu.getPreferredCanvasFormat();
+  sizeCanvasToDisplay(canvas, device);
+  context.configure({
+    device,
+    format,
+    alphaMode: 'opaque',
+  });
+
+  // Adds depth texture
+  const depthTexture = device.createTexture({
+    label: 'cube depth texture',
+    size: [canvas.width, canvas.height],
+    format: 'depth24plus',
+    usage: GPUTextureUsage.RENDER_ATTACHMENT,
+  });
+
+  // Vertex Data and Vertex Buffer for a Cube
+  // 24 vertices: 4 per face, each = [x, y, z,  u, v]
+  const cubeVertexData = new Float32Array([
+    // +Z (front)
+    -1, -1, 1, 0, 1, 1, -1, 1, 1, 1, 1, 1, 1, 1, 0, -1, 1, 1, 0, 0,
+    // -Z (back)
+    1, -1, -1, 0, 1, -1, -1, -1, 1, 1, -1, 1, -1, 1, 0, 1, 1, -1, 0, 0,
+    // -X (left)
+    -1, -1, -1, 0, 1, -1, -1, 1, 1, 1, -1, 1, 1, 1, 0, -1, 1, -1, 0, 0,
+    // +X (right)
+    1, -1, 1, 0, 1, 1, -1, -1, 1, 1, 1, 1, -1, 1, 0, 1, 1, 1, 0, 0,
+    // +Y (top)
+    -1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, -1, 1, 0, -1, 1, -1, 0, 0,
+    // -Y (bottom)
+    -1, -1, -1, 0, 1, 1, -1, -1, 1, 1, 1, -1, 1, 1, 0, -1, -1, 1, 0, 0,
+  ]);
+  // 36 indices: 2 triangles per face. For face f, corners are f*4 + (0,1,2,3).
+  const cubeIndexData = new Uint16Array([
+    // +Z
+    0, 1, 2, 0, 2, 3,
+    // -Z
+    4, 5, 6, 4, 6, 7,
+    // -X
+    8, 9, 10, 8, 10, 11,
+    // +X
+    12, 13, 14, 12, 14, 15,
+    // +Y
+    16, 17, 18, 16, 18, 19,
+    // -Y
+    20, 21, 22, 20, 22, 23,
+  ]);
+
+  const cubeVertexBuffer = device.createBuffer({
+    label: 'cube vertices',
+    size: cubeVertexData.byteLength,
+    usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
+  });
+  device.queue.writeBuffer(cubeVertexBuffer, 0, cubeVertexData);
+
+  const cubeIndexBuffer = device.createBuffer({
+    label: 'cube indices',
+    size: cubeIndexData.byteLength,
+    usage: GPUBufferUsage.INDEX | GPUBufferUsage.COPY_DST,
+  });
+  device.queue.writeBuffer(cubeIndexBuffer, 0, cubeIndexData);
+
+  const uniformBuffer = device.createBuffer({
+    label: 'uniform cube',
+    size: 64, // 4x4 matrix of 32-bit floats
+    usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+  });
+
+  const shaderModule = device.createShaderModule({
+    label: 'cube shaders',
+    code: `
+      struct VertexOutput {
+        @builtin(position) clipPosition: vec4<f32>,  // required: the clip-space position of the vertex
+        @location(0) fragUV: vec2<f32>,             // extra: interpolated UV coordinates to pass to the fragment shader
+      };
+
+      @group(0) @binding(0) var<uniform> mvpMatrix: mat4x4<f32>;
+
+      @vertex
+      fn vs_main(@location(0) position: vec3<f32>, @location(1) uv: vec2<f32>) -> VertexOutput {
+        var output: VertexOutput;
+        output.clipPosition = mvpMatrix * vec4<f32>(position, 1.0);
+        output.fragUV = uv;
+        return output;
+      }
+
+      @fragment
+      fn fs_main(@location(0) uv: vec2<f32>) -> @location(0) vec4<f32> {
+        let purple = vec3<f32>(0.5, 0.0, 0.9);
+        let blue = vec3<f32>(0.0, 0.3, 0.9);
+        let color = mix(purple, blue, uv.y);
+        return vec4<f32>(color, 1.0);
+      }
+    `,
+  });
+
+  const pipeline = device.createRenderPipeline({
+    label: 'cube pipeline',
+    layout: 'auto',
+    vertex: {
+      module: shaderModule,
+      entryPoint: 'vs_main',
+      buffers: [
+        {
+          arrayStride: 20, // 5 floats * 4 bytes per float
+          attributes: [
+            {
+              shaderLocation: 0, // matches @location(0) in the shader
+              offset: 0, // this attribute starts at byte 0 of each vertex
+              format: 'float32x3', // 3 × 32-bit floats = our (x, y, z)
+            },
+            {
+              shaderLocation: 1, // matches @location(1) in the shader
+              offset: 12, // this attribute starts at byte 12 of each vertex
+              format: 'float32x2', // 2 × 32-bit floats = our (u, v)
+            },
+          ],
+        },
+      ],
+    },
+    fragment: {
+      module: shaderModule,
+      entryPoint: 'fs_main',
+      targets: [{ format }],
+    },
+    primitive: {
+      topology: 'triangle-list',
+    },
+    depthStencil: {
+      depthWriteEnabled: true,
+      depthCompare: 'less',
+      format: 'depth24plus',
+    },
+  });
+
+  const uniformBindGroup = device.createBindGroup({
+    label: 'mvp bind group',
+    layout: pipeline.getBindGroupLayout(0), // the auto-inferred layout for @group(0)
+    entries: [
+      {
+        binding: 0,
+        resource: {
+          buffer: uniformBuffer,
+        },
+      },
+    ],
+  });
+
+  startRenderLoop(
+    device,
+    context,
+    pipeline,
+    cubeVertexBuffer,
+    cubeIndexBuffer,
+    cubeIndexData.length,
+    uniformBuffer,
+    uniformBindGroup,
+    depthTexture
+  );
+  setStatus(`Pharos — clearing at ${format}, and drawing a cube.`);
+}
+
 setStatus('Initializing WebGPU…');
 const device = await initWebGpu();
 if (device) {
@@ -147,172 +317,6 @@ if (device) {
   if (!context) {
     setStatus('Could not obtain a WebGPU canvas context.', 'error');
   } else {
-    const format = navigator.gpu.getPreferredCanvasFormat();
-    sizeCanvasToDisplay(canvas, device);
-    context.configure({
-      device,
-      format,
-      alphaMode: 'opaque',
-    });
-
-    // Vertex Data and Vertex Buffer for a Cube
-    // 24 vertices: 4 per face, each = [x, y, z,  u, v]
-    const cubeVertexData = new Float32Array([
-      // +Z (front)
-      -1, -1, 1, 0, 1, 1, -1, 1, 1, 1, 1, 1, 1, 1, 0, -1, 1, 1, 0, 0,
-      // -Z (back)
-      1, -1, -1, 0, 1, -1, -1, -1, 1, 1, -1, 1, -1, 1, 0, 1, 1, -1, 0, 0,
-      // -X (left)
-      -1, -1, -1, 0, 1, -1, -1, 1, 1, 1, -1, 1, 1, 1, 0, -1, 1, -1, 0, 0,
-      // +X (right)
-      1, -1, 1, 0, 1, 1, -1, -1, 1, 1, 1, 1, -1, 1, 0, 1, 1, 1, 0, 0,
-      // +Y (top)
-      -1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, -1, 1, 0, -1, 1, -1, 0, 0,
-      // -Y (bottom)
-      -1, -1, -1, 0, 1, 1, -1, -1, 1, 1, 1, -1, 1, 1, 0, -1, -1, 1, 0, 0,
-    ]);
-    // 36 indices: 2 triangles per face. For face f, corners are f*4 + (0,1,2,3).
-    const cubeIndexData = new Uint16Array([
-      0,
-      1,
-      2,
-      0,
-      2,
-      3, // +Z
-      4,
-      5,
-      6,
-      4,
-      6,
-      7, // -Z
-      8,
-      9,
-      10,
-      8,
-      10,
-      11, // -X
-      12,
-      13,
-      14,
-      12,
-      14,
-      15, // +X
-      16,
-      17,
-      18,
-      16,
-      18,
-      19, // +Y
-      20,
-      21,
-      22,
-      20,
-      22,
-      23, // -Y
-    ]);
-
-    const cubeVertexBuffer = device.createBuffer({
-      label: 'cube vertices',
-      size: cubeVertexData.byteLength,
-      usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
-    });
-    device.queue.writeBuffer(cubeVertexBuffer, 0, cubeVertexData);
-
-    const cubeIndexBuffer = device.createBuffer({
-      label: 'cube indices',
-      size: cubeIndexData.byteLength,
-      usage: GPUBufferUsage.INDEX | GPUBufferUsage.COPY_DST,
-    });
-    device.queue.writeBuffer(cubeIndexBuffer, 0, cubeIndexData);
-
-    const uniformBuffer = device.createBuffer({
-      label: 'uniform cube',
-      size: 64, // 4x4 matrix of 32-bit floats
-      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-    });
-
-    const shaderModule = device.createShaderModule({
-      label: 'cube shaders',
-      code: `
-        struct VertexOutput {
-          @builtin(position) clipPosition: vec4<f32>,  // required: the clip-space position of the vertex
-          @location(0) fragUV: vec2<f32>,             // extra: interpolated UV coordinates to pass to the fragment shader
-        };
-
-        @group(0) @binding(0) var<uniform> mvpMatrix: mat4x4<f32>;
-
-        @vertex
-        fn vs_main(@location(0) position: vec3<f32>, @location(1) uv: vec2<f32>) -> VertexOutput {
-          var output: VertexOutput;
-          output.clipPosition = mvpMatrix * vec4<f32>(position, 1.0);
-          output.fragUV = uv;
-          return output;
-        }
-
-        @fragment
-        fn fs_main(@location(0) uv: vec2<f32>) -> @location(0) vec4<f32> {
-          return vec4<f32>(uv, 0.5 + 0.5 * sin(uv.x * 10.0), 1.0);
-        }
-      `,
-    });
-
-    const pipeline = device.createRenderPipeline({
-      label: 'cube pipeline',
-      layout: 'auto',
-      vertex: {
-        module: shaderModule,
-        entryPoint: 'vs_main',
-        buffers: [
-          {
-            arrayStride: 20, // 5 floats * 4 bytes per float
-            attributes: [
-              {
-                shaderLocation: 0, // matches @location(0) in the shader
-                offset: 0, // this attribute starts at byte 0 of each vertex
-                format: 'float32x3', // 3 × 32-bit floats = our (x, y, z)
-              },
-              {
-                shaderLocation: 1, // matches @location(1) in the shader
-                offset: 12, // this attribute starts at byte 12 of each vertex
-                format: 'float32x2', // 2 × 32-bit floats = our (u, v)
-              },
-            ],
-          },
-        ],
-      },
-      fragment: {
-        module: shaderModule,
-        entryPoint: 'fs_main',
-        targets: [{ format }],
-      },
-      primitive: {
-        topology: 'triangle-list',
-      },
-    });
-
-    const uniformBindGroup = device.createBindGroup({
-      label: 'mvp bind group',
-      layout: pipeline.getBindGroupLayout(0), // the auto-inferred layout for @group(0)
-      entries: [
-        {
-          binding: 0,
-          resource: {
-            buffer: uniformBuffer,
-          },
-        },
-      ],
-    });
-
-    startRenderLoop(
-      device,
-      context,
-      pipeline,
-      cubeVertexBuffer,
-      cubeIndexBuffer,
-      cubeIndexData.length,
-      uniformBuffer,
-      uniformBindGroup
-    );
-    setStatus(`Pharos — clearing at ${format}, and drawing a cube.`);
+    initScene(device, context);
   }
 }
