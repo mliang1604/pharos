@@ -1,7 +1,7 @@
 import { defineConfig } from 'vite';
 
-export default defineConfig(({ command }) => ({
-  base: command === 'build' ? '/pharos/' : '/',
+export default defineConfig(({ mode }) => ({
+  base: mode === 'production' ? '/pharos/' : '/',
   server: {
     port: 5173,
     open: true,
