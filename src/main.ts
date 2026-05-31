@@ -69,7 +69,11 @@ function sizeCanvasToDisplay(canvas: HTMLCanvasElement, device: GPUDevice): void
   canvas.height = height;
 }
 
-function startClearLoop(device: GPUDevice, context: GPUCanvasContext): void {
+function startClearLoop(
+  device: GPUDevice,
+  context: GPUCanvasContext,
+  pipeline: GPURenderPipeline
+): void {
   const startTime = performance.now();
 
   function frame(): void {
@@ -90,6 +94,8 @@ function startClearLoop(device: GPUDevice, context: GPUCanvasContext): void {
         },
       ],
     });
+    pass.setPipeline(pipeline);
+    pass.draw(3);
     pass.end();
     device.queue.submit([encoder.finish()]);
 
@@ -113,7 +119,45 @@ if (device) {
       format,
       alphaMode: 'opaque',
     });
-    startClearLoop(device, context);
-    setStatus(`Pharos — clearing at ${format}.`);
+
+    const shaderModule = device.createShaderModule({
+      label: 'triangle shaders',
+      code: `
+        @vertex
+        fn vs_main(@builtin(vertex_index) index: u32) -> @builtin(position) vec4<f32> {
+          let positions = array<vec2<f32>, 3>(
+            vec2<f32>(0.0, 0.5),
+            vec2<f32>(-0.5, -0.5),
+            vec2<f32>(0.5, -0.5)
+          );
+          return vec4<f32>(positions[index], 0.0, 1.0);
+        }
+
+        @fragment
+        fn fs_main() -> @location(0) vec4<f32> {
+          return vec4<f32>(1.0, 0.0, 0.0, 1.0);
+        }
+      `,
+    });
+
+    const pipeline = device.createRenderPipeline({
+      label: 'triangle pipeline',
+      layout: 'auto',
+      vertex: {
+        module: shaderModule,
+        entryPoint: 'vs_main',
+      },
+      fragment: {
+        module: shaderModule,
+        entryPoint: 'fs_main',
+        targets: [{ format }],
+      },
+      primitive: {
+        topology: 'triangle-list',
+      },
+    });
+
+    startClearLoop(device, context, pipeline);
+    setStatus(`Pharos — clearing at ${format}, and drawing a triangle.`);
   }
 }
