@@ -101,13 +101,20 @@ function startRenderLoop(
   bindGroup: GPUBindGroup,
   depthTexture: GPUTexture
 ): void {
-  const startTime = performance.now();
   const mvpData = new Float32Array(16); // 4x4 matrix
 
-  function frame(): void {
-    const elapsed = (performance.now() - startTime) / 1000;
-    const angle = elapsed;
+  // STATE
+  let rotationalAngle = 0;
+  let elapsed = 0;
+  const ANGULAR_SPEED = 1.0;
+  let lastTime = performance.now();
 
+  function update(dt: number): void {
+    rotationalAngle += ANGULAR_SPEED * dt;
+    elapsed += dt;
+  }
+
+  function render(): void {
     // Build the MVP matrix
     const aspect = canvas.width / canvas.height;
     const project = mat4.perspective(
@@ -121,8 +128,8 @@ function startRenderLoop(
       [0, 0, 0], // look at position
       [0, 1, 0] // up vector
     );
-    const model = mat4.rotationY(angle);
-    mat4.rotateX(model, angle * 0.5, model);
+    const model = mat4.rotationY(rotationalAngle);
+    mat4.rotateX(model, rotationalAngle * 0.5, model);
 
     mat4.multiply(project, mat4.multiply(view, model), mvpData);
     device.queue.writeBuffer(uniformBuffer, 0, mvpData);
@@ -160,6 +167,13 @@ function startRenderLoop(
     pass.drawIndexed(indexCount);
     pass.end();
     device.queue.submit([encoder.finish()]);
+  }
+
+  function frame(now: number): void {
+    const dt = (now - lastTime) / 1000;
+    lastTime = now;
+    update(dt);
+    render();
     requestAnimationFrame(frame);
   }
 

@@ -1,5 +1,8 @@
-# Issue 5 - Hardcoded Triangle
-
+---
+tags:
+  - notes
+phase: "0"
+---
 The first time we draw an actual *shape*. Pairs with [[Issue 4 - Canvas Context and Clear Color]], which got the canvas clearing to a cycling color every frame. Until now the screen has only ever been wiped to a flat color — no geometry, no shaders. This issue adds the smallest possible real render: a single triangle, drawn by code we wrote, on top of that same cycling background.
 
 ## What we built

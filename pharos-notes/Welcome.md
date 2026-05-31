@@ -1,3 +1,8 @@
+---
+tags:
+  - welcome
+---
+
 # Pharos — Notes Vault
 
 Working notes for [Pharos](https://github.com/mliang1604/pharos), a WebGPU game engine in TypeScript. This vault is for things that don't belong in code comments or PR descriptions — concept explanations, design sketches, decision logs, scratch math, gotchas worth remembering later.
@@ -6,13 +11,15 @@ Working notes for [Pharos](https://github.com/mliang1604/pharos), a WebGPU game 
 
 ### Learnings
 
-- [[Issue 3 - WebGPU Init]] — boot sequence, asymmetric failure modes, `void` for floating promises, top-level `await`, Vite dead-code elimination, TypeScript narrowing across closures.
-- [[Issue 4 - Canvas Context and Clear Color]] — beginner-friendly intro to canvas contexts, swap chains, render passes, command encoders, and the rAF loop. Pairs with Issue 3.
+Grouped by milestone phase — each phase page links to its per-issue notes.
 
-_(More notes will land here as concepts come up during each phase.)_
+- [[Phase 0 — Foundations]] — WebGPU bring-up, the render pipeline, the textured spinning cube, and the delta-time game loop.
+
+_(More phase pages will land here as later phases pick up notes.)_
 
 ## See also
 
+- [Live demo](https://mliang1604.github.io/pharos/) — deployed WebGPU build
 - [README.md](../README.md) — project overview and roadmap pointer
 - [PLAN.md](../PLAN.md) — phased milestones and per-issue scope
 - [GitHub repo](https://github.com/mliang1604/pharos) — issues, PRs, milestones, CI
