@@ -1,0 +1,17 @@
+{
+  // Format with Prettier on every save.
+  "editor.formatOnSave": true,
+  "editor.defaultFormatter": "esbenp.prettier-vscode",
+
+  // Be explicit per-language so a built-in/other formatter can't win the file.
+  "[typescript]": { "editor.defaultFormatter": "esbenp.prettier-vscode" },
+  "[javascript]": { "editor.defaultFormatter": "esbenp.prettier-vscode" },
+  "[json]": { "editor.defaultFormatter": "esbenp.prettier-vscode" },
+  "[jsonc]": { "editor.defaultFormatter": "esbenp.prettier-vscode" },
+  "[html]": { "editor.defaultFormatter": "esbenp.prettier-vscode" },
+  "[css]": { "editor.defaultFormatter": "esbenp.prettier-vscode" },
+
+  // Markdown is hand-formatted in this repo (also in .prettierignore) —
+  // never auto-format it on save.
+  "[markdown]": { "editor.formatOnSave": false }
+}
