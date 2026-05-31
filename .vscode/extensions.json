@@ -1,0 +1,4 @@
+{
+  // Prompt anyone opening this repo to install Prettier so format-on-save works.
+  "recommendations": ["esbenp.prettier-vscode"]
+}
