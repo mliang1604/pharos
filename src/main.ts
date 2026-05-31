@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 import { mat4 } from 'wgpu-matrix';
+import { createHud } from './debug/hud';
 
 function requireElement<T extends Element>(selector: string): T {
   const el = document.querySelector<T>(selector);
@@ -99,7 +100,8 @@ function startRenderLoop(
   indexCount: number,
   uniformBuffer: GPUBuffer,
   bindGroup: GPUBindGroup,
-  depthTexture: GPUTexture
+  depthTexture: GPUTexture,
+  hud: ReturnType<typeof createHud>
 ): void {
   const mvpData = new Float32Array(16); // 4x4 matrix
 
@@ -174,6 +176,9 @@ function startRenderLoop(
     lastTime = now;
     update(dt);
     render();
+    // The cube is the only draw call today. Replace this hardcoded 1 with a
+    // real per-frame draw counter once there is more than one draw site.
+    hud.frame(now, 1);
     requestAnimationFrame(frame);
   }
 
@@ -351,6 +356,9 @@ function initScene(device: GPUDevice, context: GPUCanvasContext): void {
     ],
   });
 
+  const hudCanvas = requireElement<HTMLCanvasElement>('#debug-hud');
+  const hud = createHud(hudCanvas);
+
   startRenderLoop(
     device,
     context,
@@ -360,7 +368,8 @@ function initScene(device: GPUDevice, context: GPUCanvasContext): void {
     cubeIndexData.length,
     uniformBuffer,
     uniformBindGroup,
-    depthTexture
+    depthTexture,
+    hud
   );
   setStatus(`Pharos — clearing at ${format}, and drawing a cube.`);
 }

@@ -37,11 +37,21 @@
         background: rgba(170, 50, 50, 0.85);
         border-color: rgba(255, 200, 200, 0.3);
       }
+      #debug-hud {
+        position: fixed;
+        top: 16px;
+        right: 16px;
+        z-index: 2;
+        pointer-events: none;
+        width: 300px;
+        height: 150px;
+      }
     </style>
   </head>
   <body>
     <canvas id="app"></canvas>
     <div id="status" data-tone="info" role="status" aria-live="polite">Loading…</div>
+    <canvas id="debug-hud"></canvas>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
