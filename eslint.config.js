@@ -21,6 +21,27 @@ export default tseslint.config(
         'error',
         { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
       ],
+      // The math library is only reachable through src/math (see issue #10).
+      // Catches value and type imports alike.
+      '@typescript-eslint/no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: 'wgpu-matrix',
+              message:
+                'Import vectors and matrices from "@/math" so the backing library stays swappable.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    // src/math is the chokepoint, so it is allowed to import wgpu-matrix.
+    files: ['src/math/**/*.ts'],
+    rules: {
+      '@typescript-eslint/no-restricted-imports': 'off',
     },
   },
   {

@@ -9,6 +9,9 @@
     "verbatimModuleSyntax": true,
     "isolatedModules": true,
     "resolveJsonModule": true,
+    "paths": {
+      "@/*": ["./src/*"]
+    },
     "jsx": "preserve",
     "noEmit": true,
     "skipLibCheck": true,
