@@ -3,6 +3,7 @@
 
 import { mat4 } from '@/math';
 import { createHud } from './debug/hud';
+import { Mesh } from '@/geometry/mesh';
 
 function requireElement<T extends Element>(selector: string): T {
   const el = document.querySelector<T>(selector);
@@ -95,9 +96,7 @@ function startRenderLoop(
   device: GPUDevice,
   context: GPUCanvasContext,
   pipeline: GPURenderPipeline,
-  vertexBuffer: GPUBuffer,
-  indexBuffer: GPUBuffer,
-  indexCount: number,
+  cubeMesh: Mesh,
   uniformBuffer: GPUBuffer,
   bindGroup: GPUBindGroup,
   depthTexture: GPUTexture,
@@ -164,9 +163,7 @@ function startRenderLoop(
     // Draw the cube
     pass.setPipeline(pipeline);
     pass.setBindGroup(0, bindGroup);
-    pass.setVertexBuffer(0, vertexBuffer);
-    pass.setIndexBuffer(indexBuffer, 'uint16');
-    pass.drawIndexed(indexCount);
+    cubeMesh.draw(pass);
     pass.end();
     device.queue.submit([encoder.finish()]);
   }
@@ -249,19 +246,12 @@ function initScene(device: GPUDevice, context: GPUCanvasContext): void {
     20, 21, 22, 20, 22, 23,
   ]);
 
-  const cubeVertexBuffer = device.createBuffer({
-    label: 'cube vertices',
-    size: cubeVertexData.byteLength,
-    usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
+  const cubeMesh = new Mesh({
+    device,
+    vertices: cubeVertexData,
+    formats: ['float32x3', 'float32x2'],
+    indices: cubeIndexData,
   });
-  device.queue.writeBuffer(cubeVertexBuffer, 0, cubeVertexData);
-
-  const cubeIndexBuffer = device.createBuffer({
-    label: 'cube indices',
-    size: cubeIndexData.byteLength,
-    usage: GPUBufferUsage.INDEX | GPUBufferUsage.COPY_DST,
-  });
-  device.queue.writeBuffer(cubeIndexBuffer, 0, cubeIndexData);
 
   const uniformBuffer = device.createBuffer({
     label: 'uniform cube',
@@ -302,23 +292,7 @@ function initScene(device: GPUDevice, context: GPUCanvasContext): void {
     vertex: {
       module: shaderModule,
       entryPoint: 'vs_main',
-      buffers: [
-        {
-          arrayStride: 20, // 5 floats * 4 bytes per float
-          attributes: [
-            {
-              shaderLocation: 0, // matches @location(0) in the shader
-              offset: 0, // this attribute starts at byte 0 of each vertex
-              format: 'float32x3', // 3 × 32-bit floats = our (x, y, z)
-            },
-            {
-              shaderLocation: 1, // matches @location(1) in the shader
-              offset: 12, // this attribute starts at byte 12 of each vertex
-              format: 'float32x2', // 2 × 32-bit floats = our (u, v)
-            },
-          ],
-        },
-      ],
+      buffers: [cubeMesh.vertexBufferLayout],
     },
     fragment: {
       module: shaderModule,
@@ -363,9 +337,7 @@ function initScene(device: GPUDevice, context: GPUCanvasContext): void {
     device,
     context,
     pipeline,
-    cubeVertexBuffer,
-    cubeIndexBuffer,
-    cubeIndexData.length,
+    cubeMesh,
     uniformBuffer,
     uniformBindGroup,
     depthTexture,
