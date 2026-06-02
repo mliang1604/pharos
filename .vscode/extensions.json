@@ -1,4 +1,6 @@
 {
-  // Prompt anyone opening this repo to install Prettier so format-on-save works.
-  "recommendations": ["esbenp.prettier-vscode"]
+  // Prompt anyone opening this repo to install:
+  // - Prettier, so format-on-save works.
+  // - wgsl-analyzer, for WGSL shader highlighting + inline diagnostics.
+  "recommendations": ["esbenp.prettier-vscode", "wgsl-analyzer.wgsl-analyzer"]
 }
