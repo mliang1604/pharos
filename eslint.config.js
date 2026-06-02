@@ -53,5 +53,14 @@ export default tseslint.config(
     },
     ...tseslint.configs.disableTypeChecked,
   },
+  {
+    // Test specs assert on mock spies (e.g. `expect(pass.draw)`), which the
+    // unbound-method rule reports as a false positive — a `vi.fn()` is a plain
+    // function with no `this` to lose.
+    files: ['test/**/*.{test,spec}.ts'],
+    rules: {
+      '@typescript-eslint/unbound-method': 'off',
+    },
+  },
   prettier
 );
