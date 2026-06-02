@@ -4,6 +4,10 @@
 import { mat4 } from '@/math';
 import { createHud } from './debug/hud';
 import { Mesh } from '@/geometry/mesh';
+import { UniformBuffer } from '@/gpu/uniformBuffer';
+import { Shader } from '@/materials/shader';
+import { Material } from '@/materials/material';
+import cubeShaderCode from '@/materials/shaders/cube.wgsl?raw';
 
 function requireElement<T extends Element>(selector: string): T {
   const el = document.querySelector<T>(selector);
@@ -95,10 +99,9 @@ function sizeCanvasToDisplay(canvas: HTMLCanvasElement, device: GPUDevice): void
 function startRenderLoop(
   device: GPUDevice,
   context: GPUCanvasContext,
-  pipeline: GPURenderPipeline,
+  material: Material,
   cubeMesh: Mesh,
-  uniformBuffer: GPUBuffer,
-  bindGroup: GPUBindGroup,
+  uniforms: UniformBuffer,
   depthTexture: GPUTexture,
   hud: ReturnType<typeof createHud>
 ): void {
@@ -133,7 +136,7 @@ function startRenderLoop(
     mat4.rotateX(model, rotationalAngle * 0.5, model);
 
     mat4.multiply(project, mat4.multiply(view, model), mvpData);
-    device.queue.writeBuffer(uniformBuffer, 0, mvpData);
+    uniforms.write(mvpData);
 
     // Color-changing background
     const r = 0.5 + 0.5 * Math.sin(elapsed * 0.7);
@@ -161,8 +164,7 @@ function startRenderLoop(
     });
 
     // Draw the cube
-    pass.setPipeline(pipeline);
-    pass.setBindGroup(0, bindGroup);
+    material.bind(pass);
     cubeMesh.draw(pass);
     pass.end();
     device.queue.submit([encoder.finish()]);
@@ -253,96 +255,36 @@ function initScene(device: GPUDevice, context: GPUCanvasContext): void {
     indices: cubeIndexData,
   });
 
-  const uniformBuffer = device.createBuffer({
-    label: 'uniform cube',
-    size: 64, // 4x4 matrix of 32-bit floats
-    usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+  const uniforms = new UniformBuffer(device, 64, 'uniform cube');
+
+  const shader = new Shader({
+    device,
+    code: cubeShaderCode,
+    label: 'cube shader',
   });
 
-  const shaderModule = device.createShaderModule({
-    label: 'cube shaders',
-    code: `
-      struct VertexOutput {
-        @builtin(position) clipPosition: vec4<f32>,  // required: the clip-space position of the vertex
-        @location(0) fragUV: vec2<f32>,             // extra: interpolated UV coordinates to pass to the fragment shader
-      };
-
-      @group(0) @binding(0) var<uniform> mvpMatrix: mat4x4<f32>;
-      @group(0) @binding(1) var cubeTexture: texture_2d<f32>;
-      @group(0) @binding(2) var cubeSampler: sampler;
-
-      @vertex
-      fn vs_main(@location(0) position: vec3<f32>, @location(1) uv: vec2<f32>) -> VertexOutput {
-        var output: VertexOutput;
-        output.clipPosition = mvpMatrix * vec4<f32>(position, 1.0);
-        output.fragUV = uv;
-        return output;
-      }
-
-      @fragment
-      fn fs_main(@location(0) uv: vec2<f32>) -> @location(0) vec4<f32> {
-        return textureSample(cubeTexture, cubeSampler, uv);
-      }
-    `,
-  });
-
-  const pipeline = device.createRenderPipeline({
-    label: 'cube pipeline',
-    layout: 'auto',
-    vertex: {
-      module: shaderModule,
-      entryPoint: 'vs_main',
-      buffers: [cubeMesh.vertexBufferLayout],
-    },
-    fragment: {
-      module: shaderModule,
-      entryPoint: 'fs_main',
-      targets: [{ format }],
-    },
-    primitive: {
-      topology: 'triangle-list',
-    },
+  const material = new Material({
+    device,
+    shader,
+    vertexBufferLayouts: [cubeMesh.vertexBufferLayout],
+    targets: [{ format }],
+    entries: [
+      { binding: 0, resource: { buffer: uniforms.buffer } },
+      { binding: 1, resource: texture.createView() },
+      { binding: 2, resource: sampler },
+    ],
     depthStencil: {
       depthWriteEnabled: true,
       depthCompare: 'less',
       format: 'depth24plus',
     },
-  });
-
-  const uniformBindGroup = device.createBindGroup({
-    label: 'mvp bind group',
-    layout: pipeline.getBindGroupLayout(0), // the auto-inferred layout for @group(0)
-    entries: [
-      {
-        binding: 0,
-        resource: {
-          buffer: uniformBuffer,
-        },
-      },
-      {
-        binding: 1,
-        resource: texture.createView(),
-      },
-      {
-        binding: 2,
-        resource: sampler,
-      },
-    ],
+    label: 'cube material',
   });
 
   const hudCanvas = requireElement<HTMLCanvasElement>('#debug-hud');
   const hud = createHud(hudCanvas);
 
-  startRenderLoop(
-    device,
-    context,
-    pipeline,
-    cubeMesh,
-    uniformBuffer,
-    uniformBindGroup,
-    depthTexture,
-    hud
-  );
+  startRenderLoop(device, context, material, cubeMesh, uniforms, depthTexture, hud);
   setStatus(`Pharos — clearing at ${format}, and drawing a cube.`);
 }
 
