@@ -1,6 +1,3 @@
-// Copyright (c) 2026 Michael Liang
-// SPDX-License-Identifier: MIT
-
 import { describe, expect, it } from 'vitest';
 
 // Smoke test that proves the Vitest wiring is alive. Real subsystem coverage

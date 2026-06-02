@@ -13,5 +13,11 @@
 
   // Markdown is hand-formatted in this repo (also in .prettierignore) —
   // never auto-format it on save.
-  "[markdown]": { "editor.formatOnSave": false }
+  "[markdown]": {
+    "editor.formatOnSave": false
+  },
+  // Use the workspace's TypeScript (node_modules), not the editor's bundled
+  // version, so editor diagnostics match `tsc` on the CLI / in CI.
+  "js/ts.tsdk.path": "node_modules/typescript/lib",
+  "js/ts.tsdk.promptToUseWorkspaceVersion": true
 }

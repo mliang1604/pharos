@@ -20,7 +20,29 @@ export default defineConfig(({ mode }) => ({
     sourcemap: true,
   },
   test: {
-    include: ['src/**/*.{test,spec}.ts'],
-    environment: 'node',
+    // Two lanes, separated by directory so a file's path declares its kind.
+    // `extends: true` inherits the root Vite config above (notably the `@/`
+    // alias). Unit tests run in Node with a mocked GPU; integration tests get
+    // their own lane so `npm test` stays fast and CI-safe — switch the
+    // integration environment to a real GPU (browser/dawn) when the first one
+    // lands.
+    projects: [
+      {
+        extends: true,
+        test: {
+          name: 'unit',
+          include: ['test/unit/**/*.{test,spec}.ts'],
+          environment: 'node',
+        },
+      },
+      {
+        extends: true,
+        test: {
+          name: 'integration',
+          include: ['test/integration/**/*.{test,spec}.ts'],
+          environment: 'node',
+        },
+      },
+    ],
   },
 }));
