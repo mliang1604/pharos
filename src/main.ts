@@ -201,7 +201,11 @@ async function initScene(device: GPUDevice, context: GPUCanvasContext) {
     {}
   );
 
-  const cubeTexture = await Texture.load(device, '/textures/uv-grid.png', 'cube texture');
+  const cubeTexture = await Texture.load(
+    device,
+    `${import.meta.env.BASE_URL}textures/uv-grid.png`,
+    'cube texture'
+  );
 
   // Adds depth texture
   const depthTexture = device.createTexture({
