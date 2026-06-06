@@ -1,12 +1,15 @@
 // Copyright (c) 2026 Michael Liang
 // SPDX-License-Identifier: MIT
 
-import { mat4 } from '@/math';
-import { createHud } from './debug/hud';
+import { Camera } from '@/camera/camera';
+import { OrbitControls } from '@/camera/orbitControls';
+import { createHud } from '@/debug/hud';
 import { Mesh } from '@/geometry/mesh';
 import { UniformBuffer } from '@/gpu/uniformBuffer';
 import { Shader } from '@/materials/shader';
 import { Material } from '@/materials/material';
+import { mat4, vec3 } from '@/math';
+
 import cubeShaderCode from '@/materials/shaders/cube.wgsl?raw';
 
 function requireElement<T extends Element>(selector: string): T {
@@ -103,7 +106,8 @@ function startRenderLoop(
   cubeMesh: Mesh,
   uniforms: UniformBuffer,
   depthTexture: GPUTexture,
-  hud: ReturnType<typeof createHud>
+  hud: ReturnType<typeof createHud>,
+  camera: Camera
 ): void {
   const mvpData = new Float32Array(16); // 4x4 matrix
 
@@ -120,22 +124,10 @@ function startRenderLoop(
 
   function render(): void {
     // Build the MVP matrix
-    const aspect = canvas.width / canvas.height;
-    const project = mat4.perspective(
-      (60 * Math.PI) / 180, // vertical field of view in radians
-      aspect,
-      0.1, // near plane
-      100.0 // far plane
-    );
-    const view = mat4.lookAt(
-      [0, 0, 5], // camera position
-      [0, 0, 0], // look at position
-      [0, 1, 0] // up vector
-    );
     const model = mat4.rotationY(rotationalAngle);
     mat4.rotateX(model, rotationalAngle * 0.5, model);
 
-    mat4.multiply(project, mat4.multiply(view, model), mvpData);
+    mat4.multiply(camera.projectionMatrix, mat4.multiply(camera.viewMatrix, model), mvpData);
     uniforms.write(mvpData);
 
     // Color-changing background
@@ -192,6 +184,23 @@ function initScene(device: GPUDevice, context: GPUCanvasContext): void {
     format,
     alphaMode: 'opaque',
   });
+
+  const camera = new Camera({
+    position: vec3.fromValues(0, 0, 5),
+    target: vec3.fromValues(0, 0, 0),
+    up: vec3.fromValues(0, 1, 0),
+    fieldOfView: (60 * Math.PI) / 180,
+    aspectRatio: canvas.width / canvas.height,
+    near: 0.1,
+    far: 100.0,
+  });
+  new OrbitControls(
+    camera,
+    canvas,
+    { radius: 5, azimuth: 0, elevation: 0, target: vec3.fromValues(0, 0, 0) },
+    {},
+    {}
+  );
 
   const [texSize, texData] = generateCheckerboardTexture();
   const texture = device.createTexture({
@@ -284,8 +293,8 @@ function initScene(device: GPUDevice, context: GPUCanvasContext): void {
   const hudCanvas = requireElement<HTMLCanvasElement>('#debug-hud');
   const hud = createHud(hudCanvas);
 
-  startRenderLoop(device, context, material, cubeMesh, uniforms, depthTexture, hud);
-  setStatus(`Pharos — clearing at ${format}, and drawing a cube.`);
+  startRenderLoop(device, context, material, cubeMesh, uniforms, depthTexture, hud, camera);
+  setStatus(`Pharos — clearing at ${format}, and drawing a cube. Drag to rotate; scroll to zoom.`);
 }
 
 setStatus('Initializing WebGPU…');
