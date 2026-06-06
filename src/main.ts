@@ -93,13 +93,11 @@ function startRenderLoop(
 ): void {
   // STATE
   let rotationalAngle = 0;
-  let elapsed = 0;
   const ANGULAR_SPEED = 1.0;
   let lastTime = performance.now();
 
   function update(dt: number): void {
     rotationalAngle += ANGULAR_SPEED * dt;
-    elapsed += dt;
   }
 
   function render(): void {
@@ -131,10 +129,10 @@ function startRenderLoop(
 
     uniforms.write(data);
 
-    // Color-changing background
-    const r = 0.5 + 0.5 * Math.sin(elapsed * 0.7);
-    const g = 0.5 + 0.5 * Math.sin(elapsed * 1.1 + 2.0);
-    const b = 0.5 + 0.5 * Math.sin(elapsed * 1.3 + 4.0);
+    // Fixed dark grey background
+    const r = 0.1;
+    const g = 0.1;
+    const b = 0.1;
 
     // Open a render pass
     const encoder = device.createCommandEncoder({ label: 'frame encoder' });
@@ -327,7 +325,9 @@ async function initScene(device: GPUDevice, context: GPUCanvasContext) {
   const hud = createHud(hudCanvas);
 
   startRenderLoop(device, context, material, cubeMesh, uniforms, depthTexture, hud, camera);
-  setStatus(`Pharos — clearing at ${format}, and drawing a cube. Drag to rotate; scroll to zoom.`);
+  setStatus(
+    `Pharos — clearing at ${format}, and drawing a rotating cube. Drag to rotate the orbital camera; scroll to zoom.`
+  );
 }
 
 setStatus('Initializing WebGPU…');
