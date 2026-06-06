@@ -9,6 +9,7 @@ import { UniformBuffer } from '@/gpu/uniformBuffer';
 import { Shader } from '@/materials/shader';
 import { Material } from '@/materials/material';
 import { mat4, vec3 } from '@/math';
+import { Texture } from '@/gpu/texture';
 
 import cubeShaderCode from '@/materials/shaders/cube.wgsl?raw';
 
@@ -24,25 +25,6 @@ const canvas = requireElement<HTMLCanvasElement>('#app');
 const statusEl = requireElement<HTMLElement>('#status');
 
 type StatusTone = 'info' | 'error';
-
-function generateCheckerboardTexture(): [number, Uint8Array<ArrayBuffer>] {
-  const texSize = 256;
-  const texData = new Uint8Array(texSize * texSize * 4); // RGBA, 4 bytes per pixel
-  const color1: [number, number, number] = [0, 0, 0];
-  const color2: [number, number, number] = [255, 255, 255];
-  for (let y = 0; y < texSize; y++) {
-    for (let x = 0; x < texSize; x++) {
-      const checker = (Math.floor(x / 32) + Math.floor(y / 32)) % 2; // 32px squares
-      const [r, g, b] = checker === 0 ? color1 : color2;
-      const i = (y * texSize + x) * 4;
-      texData[i] = r;
-      texData[i + 1] = g;
-      texData[i + 2] = b;
-      texData[i + 3] = 255; // alpha
-    }
-  }
-  return [texSize, texData];
-}
 
 function setStatus(message: string, tone: StatusTone = 'info'): void {
   statusEl.textContent = message;
@@ -176,7 +158,7 @@ function startRenderLoop(
   requestAnimationFrame(frame);
 }
 
-function initScene(device: GPUDevice, context: GPUCanvasContext): void {
+async function initScene(device: GPUDevice, context: GPUCanvasContext) {
   const format = navigator.gpu.getPreferredCanvasFormat();
   sizeCanvasToDisplay(canvas, device);
   context.configure({
@@ -202,20 +184,7 @@ function initScene(device: GPUDevice, context: GPUCanvasContext): void {
     {}
   );
 
-  const [texSize, texData] = generateCheckerboardTexture();
-  const texture = device.createTexture({
-    label: 'cube texture',
-    size: [texSize, texSize],
-    format: 'rgba8unorm',
-    usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
-  });
-  device.queue.writeTexture({ texture }, texData, { bytesPerRow: texSize * 4 }, [texSize, texSize]);
-
-  const sampler = device.createSampler({
-    label: 'cube sampler',
-    magFilter: 'linear',
-    minFilter: 'linear',
-  });
+  const cubeTexture = await Texture.load(device, '/textures/uv-grid.png', 'cube texture');
 
   // Adds depth texture
   const depthTexture = device.createTexture({
@@ -279,8 +248,8 @@ function initScene(device: GPUDevice, context: GPUCanvasContext): void {
     targets: [{ format }],
     entries: [
       { binding: 0, resource: { buffer: uniforms.buffer } },
-      { binding: 1, resource: texture.createView() },
-      { binding: 2, resource: sampler },
+      { binding: 1, resource: cubeTexture.texture.createView() },
+      { binding: 2, resource: cubeTexture.sampler },
     ],
     depthStencil: {
       depthWriteEnabled: true,
@@ -304,6 +273,6 @@ if (device) {
   if (!context) {
     setStatus('Could not obtain a WebGPU canvas context.', 'error');
   } else {
-    initScene(device, context);
+    await initScene(device, context);
   }
 }
