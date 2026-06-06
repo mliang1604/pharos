@@ -54,6 +54,11 @@ export class Material {
 
   bind(pass: GPURenderPassEncoder): void {
     pass.setPipeline(this.pipeline);
+    /**
+     * This is always bind group 0 because this cube example holds per-frame,
+     * per-material, and per-object resources in the same bind group for simplicity.
+     * In a later implementation, we will replace with proper bindGroups.
+     */
     pass.setBindGroup(0, this.bindGroup);
   }
 }
