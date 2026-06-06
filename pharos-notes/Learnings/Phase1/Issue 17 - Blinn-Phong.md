@@ -59,3 +59,12 @@ Single **directional** light, as specified — an explicit placeholder until PBR
 
 - **Resize handling (#19)** — the camera aspect and depth texture are still fixed at construction.
 - Lighting graduates to **PBR metallic-roughness (#35)** in Phase 4; this Blinn-Phong is the stand-in until then.
+
+## References
+
+- [Blinn–Phong reflection model — Wikipedia](https://en.wikipedia.org/wiki/Blinn%E2%80%93Phong_reflection_model) — the model, the half-vector, and how it differs from Phong.
+- [LearnOpenGL — Advanced Lighting (Blinn-Phong)](https://learnopengl.com/Advanced-Lighting/Advanced-Lighting) — the half-vector specular and why it beats Phong's `reflect`; has an interactive Phong-vs-Blinn toggle.
+- [LearnOpenGL — Basic Lighting](https://learnopengl.com/Lighting/Basic-Lighting) — the ambient + diffuse + specular decomposition and the `N`/`L`/`V` vectors.
+- Blinn, J. F. (1977). "Models of Light Reflection for Computer Synthesized Pictures." *Computer Graphics (SIGGRAPH '77)*, 11(2), 192–198 — the original half-vector paper.
+- Phong, B. T. (1975). "Illumination for Computer Generated Pictures." *Communications of the ACM*, 18(6), 311–317 — the Phong model this modifies.
+- Akenine-Möller, Haines, Hoffman et al. *Real-Time Rendering* (4th ed.), Ch. 5 (shading) — the standard textbook treatment.
