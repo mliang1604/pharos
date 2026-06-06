@@ -110,7 +110,9 @@ subsystems together, start the loop.
   invite import cycles and bundle bloat.
 - **Shared constants.** Cross-cutting conventions get a named module rather than
   scattered literals — e.g. the bind-group strategy (group 0 = per-frame,
-  1 = per-material, 2 = per-object) belongs in `src/materials/bindGroups.ts`.
+  1 = per-material, 2 = per-object) is encoded in `src/materials/bindGroups.ts`
+  as the `BindGroup` constants. Group indices are a hard contract: they must match
+  `@group(N)` in WGSL and `setBindGroup(N)` in code.
 
 ## Deferred decisions
 
