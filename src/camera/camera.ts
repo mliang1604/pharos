@@ -46,6 +46,9 @@ export class Camera {
   get viewMatrix(): Mat4 {
     return mat4.lookAt(this.position, this.target, this.up);
   }
+  get worldPosition(): Vec3 {
+    return this.position;
+  }
 
   setView(position: Vec3, target: Vec3, up?: Vec3): void {
     this.position = position;

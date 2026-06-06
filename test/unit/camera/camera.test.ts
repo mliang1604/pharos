@@ -51,4 +51,15 @@ describe('Camera', () => {
     camera.setView(eye, target);
     expectMatrix(camera.viewMatrix, mat4.lookAt(eye, target, vec3.fromValues(0, 1, 0)));
   });
+
+  it('worldPosition returns the eye position', () => {
+    const camera = makeCamera();
+    expect(Array.from(camera.worldPosition)).toEqual([0, 0, 5]);
+  });
+
+  it('worldPosition reflects setView', () => {
+    const camera = makeCamera();
+    camera.setView(vec3.fromValues(3, 4, 0), vec3.fromValues(0, 1, 0));
+    expect(Array.from(camera.worldPosition)).toEqual([3, 4, 0]);
+  });
 });
