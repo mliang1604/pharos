@@ -86,10 +86,14 @@ function startRenderLoop(
   context: GPUCanvasContext,
   material: Material,
   cubeMesh: Mesh,
-  uniforms: UniformBuffer,
   depthTexture: GPUTexture,
   hud: ReturnType<typeof createHud>,
-  camera: Camera
+  camera: Camera,
+  perFrame: UniformBuffer,
+  perObject: UniformBuffer,
+  positions: Float32Array<ArrayBufferLike>[],
+  NUM_CUBES: number,
+  ALIGN: number
 ): void {
   // STATE
   let rotationalAngle = 0;
@@ -101,14 +105,8 @@ function startRenderLoop(
   }
 
   function render(): void {
-    // Build the model
-    const model = mat4.rotationY(rotationalAngle);
-    mat4.rotateX(model, rotationalAngle * 0.5, model);
-    // Build the viewProjections
+    // Build the perFrame pieces
     const viewProjection = mat4.multiply(camera.projectionMatrix, camera.viewMatrix);
-    // Build the normal matrix
-    const normalMatrix = mat4.transpose(mat4.inverse(model));
-    // Build the cameraPosition
     const cameraPosition = camera.worldPosition;
     const shininess = [32];
     const lightDirection = vec3.normalize([0.5, 1, 0.5]);
@@ -116,18 +114,30 @@ function startRenderLoop(
     const lightColor = vec3.fromValues(1, 1, 1);
     const specularStrength = [0.5];
 
-    const data = new Float32Array(60);
-    data.set(model, 0);
-    data.set(viewProjection, 16);
-    data.set(normalMatrix, 32);
-    data.set(cameraPosition, 48);
-    data.set(shininess, 51);
-    data.set(lightDirection, 52);
-    data.set(ambient, 55);
-    data.set(lightColor, 56);
-    data.set(specularStrength, 59);
+    // PerFrame Uniforms
+    const perFrameData = new Float32Array(28);
+    perFrameData.set(viewProjection, 0);
+    perFrameData.set(cameraPosition, 16);
+    perFrameData.set(shininess, 19);
+    perFrameData.set(lightDirection, 20);
+    perFrameData.set(ambient, 23);
+    perFrameData.set(lightColor, 24);
+    perFrameData.set(specularStrength, 27);
+    perFrame.write(perFrameData);
 
-    uniforms.write(data);
+    // PerObject Uniforms
+    const objectData = new Float32Array((NUM_CUBES * ALIGN) / 4);
+
+    positions.forEach((position, i) => {
+      const base = i * (ALIGN / 4);
+      const model = mat4.translation(position);
+      mat4.rotateX(model, rotationalAngle * 0.5, model);
+      mat4.rotateY(model, rotationalAngle * 0.2, model);
+      const normalMatrix = mat4.transpose(mat4.inverse(model));
+      objectData.set(model, base);
+      objectData.set(normalMatrix, base + 16);
+    });
+    perObject.write(objectData);
 
     // Fixed dark grey background
     const r = 0.1;
@@ -154,9 +164,10 @@ function startRenderLoop(
       },
     });
 
-    // Draw the cube
-    material.bind(pass);
-    cubeMesh.draw(pass);
+    for (let i = 0; i < positions.length; i++) {
+      material.bind(pass, [i * ALIGN]);
+      cubeMesh.draw(pass);
+    }
     pass.end();
     device.queue.submit([encoder.finish()]);
   }
@@ -168,7 +179,7 @@ function startRenderLoop(
     render();
     // The cube is the only draw call today. Replace this hardcoded 1 with a
     // real per-frame draw counter once there is more than one draw site.
-    hud.frame(now, 1);
+    hud.frame(now, NUM_CUBES);
     requestAnimationFrame(frame);
   }
 
@@ -196,7 +207,7 @@ async function initScene(device: GPUDevice, context: GPUCanvasContext) {
   new OrbitControls(
     camera,
     canvas,
-    { radius: 5, azimuth: 0, elevation: 0, target: vec3.fromValues(0, 0, 0) },
+    { radius: 25, azimuth: 0, elevation: 0, target: vec3.fromValues(0, 0, 0) },
     {},
     {}
   );
@@ -299,13 +310,35 @@ async function initScene(device: GPUDevice, context: GPUCanvasContext) {
     indices: cubeIndexData,
   });
 
-  const uniforms = new UniformBuffer(device, 240, 'uniform cube');
-
   const shader = new Shader({
     device,
     code: cubeShaderCode,
     label: 'cube shader',
   });
+
+  const ALIGN = device.limits.minUniformBufferOffsetAlignment;
+  const NUM_CUBES = 100;
+
+  const bindGroupLayout = device.createBindGroupLayout({
+    label: 'cube bind group layout',
+    entries: [
+      {
+        binding: 0,
+        visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
+        buffer: { type: 'uniform' },
+      },
+      {
+        binding: 1,
+        visibility: GPUShaderStage.VERTEX,
+        buffer: { type: 'uniform', hasDynamicOffset: true },
+      },
+      { binding: 2, visibility: GPUShaderStage.FRAGMENT, texture: {} },
+      { binding: 3, visibility: GPUShaderStage.FRAGMENT, sampler: {} },
+    ],
+  });
+
+  const perFrame = new UniformBuffer(device, 112, 'per-frame'); // PerFrame = 112 bytes
+  const perObject = new UniformBuffer(device, NUM_CUBES * ALIGN, 'per-object'); // 100 slots × 256
 
   const material = new Material({
     device,
@@ -313,9 +346,10 @@ async function initScene(device: GPUDevice, context: GPUCanvasContext) {
     vertexBufferLayouts: [cubeMesh.vertexBufferLayout],
     targets: [{ format }],
     entries: [
-      { binding: 0, resource: { buffer: uniforms.buffer } },
-      { binding: 1, resource: cubeTexture.texture.createView() },
-      { binding: 2, resource: cubeTexture.sampler },
+      { binding: 0, resource: { buffer: perFrame.buffer } },
+      { binding: 1, resource: { buffer: perObject.buffer, offset: 0, size: ALIGN } },
+      { binding: 2, resource: cubeTexture.texture.createView() },
+      { binding: 3, resource: cubeTexture.sampler },
     ],
     depthStencil: {
       depthWriteEnabled: true,
@@ -323,12 +357,34 @@ async function initScene(device: GPUDevice, context: GPUCanvasContext) {
       format: 'depth24plus',
     },
     label: 'cube material',
+    bindGroupLayout: bindGroupLayout,
   });
 
   const hudCanvas = requireElement<HTMLCanvasElement>('#debug-hud');
   const hud = createHud(hudCanvas);
 
-  startRenderLoop(device, context, material, cubeMesh, uniforms, depthTexture, hud, camera);
+  const GRID = 10,
+    SPACING = 4;
+  const positions = Array.from({ length: NUM_CUBES }, (_, i) => {
+    const col = i % GRID,
+      row = Math.floor(i / GRID);
+    return vec3.fromValues((col - GRID / 2) * SPACING, (row - GRID / 2) * SPACING, 0);
+  });
+
+  startRenderLoop(
+    device,
+    context,
+    material,
+    cubeMesh,
+    depthTexture,
+    hud,
+    camera,
+    perFrame,
+    perObject,
+    positions,
+    NUM_CUBES,
+    ALIGN
+  );
   setStatus(
     `Pharos — clearing at ${format}, and drawing a rotating cube. Drag to rotate the orbital camera; scroll to zoom.`
   );

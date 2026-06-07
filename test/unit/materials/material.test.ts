@@ -21,11 +21,27 @@ function createMockDevice() {
   } as unknown as GPURenderPipeline;
   const bindGroup = {} as GPUBindGroup;
 
+  const pipelineLayout = {} as GPUPipelineLayout;
+
   const createRenderPipeline = vi.fn((): GPURenderPipeline => pipeline);
   const createBindGroup = vi.fn((): GPUBindGroup => bindGroup);
-  const device = { createRenderPipeline, createBindGroup } as unknown as GPUDevice;
+  const createPipelineLayout = vi.fn((): GPUPipelineLayout => pipelineLayout);
+  const device = {
+    createRenderPipeline,
+    createBindGroup,
+    createPipelineLayout,
+  } as unknown as GPUDevice;
 
-  return { device, createRenderPipeline, createBindGroup, pipeline, bindGroup, bindGroupLayout };
+  return {
+    device,
+    createRenderPipeline,
+    createBindGroup,
+    createPipelineLayout,
+    pipeline,
+    bindGroup,
+    bindGroupLayout,
+    pipelineLayout,
+  };
 }
 
 function createMockPass() {
@@ -118,6 +134,52 @@ describe('Material', () => {
     material.bind(pass);
 
     expect(pass.setPipeline).toHaveBeenCalledWith(pipeline);
-    expect(pass.setBindGroup).toHaveBeenCalledWith(0, bindGroup);
+    expect(pass.setBindGroup).toHaveBeenCalledWith(0, bindGroup, undefined);
+  });
+
+  it('bind forwards dynamic offsets to setBindGroup', () => {
+    const { device, bindGroup } = createMockDevice();
+    const material = new Material({
+      device,
+      shader: createMockShader(),
+      vertexBufferLayouts,
+      targets,
+      entries,
+    });
+    const pass = createMockPass();
+
+    material.bind(pass, [256]);
+
+    expect(pass.setBindGroup).toHaveBeenCalledWith(0, bindGroup, [256]);
+  });
+
+  it('uses an explicit bind group layout instead of auto when provided', () => {
+    const {
+      device,
+      createRenderPipeline,
+      createBindGroup,
+      createPipelineLayout,
+      pipeline,
+      pipelineLayout,
+    } = createMockDevice();
+    const bindGroupLayout = {} as GPUBindGroupLayout;
+
+    new Material({
+      device,
+      shader: createMockShader(),
+      vertexBufferLayouts,
+      targets,
+      entries,
+      bindGroupLayout,
+    });
+
+    expect(createPipelineLayout).toHaveBeenCalledWith({ bindGroupLayouts: [bindGroupLayout] });
+    expect(createRenderPipeline).toHaveBeenCalledWith(
+      expect.objectContaining({ layout: pipelineLayout })
+    );
+    expect(createBindGroup).toHaveBeenCalledWith(
+      expect.objectContaining({ layout: bindGroupLayout, entries })
+    );
+    expect(pipeline.getBindGroupLayout).not.toHaveBeenCalled();
   });
 });

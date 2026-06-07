@@ -8,29 +8,33 @@ struct VertexOutput {
   @location(2) worldNormal: vec3<f32>,
 };
 
-struct Uniforms {
-  model: mat4x4<f32>,           // bytes   0–63
-  viewProjection: mat4x4<f32>,  //        64–127
-  normalMatrix: mat4x4<f32>,    //       128–191   (mat4, not mat3, on purpose)
-  cameraPosition: vec3<f32>,    //       192–203
-  shininess: f32,               //       204–207   ← packed into cameraPosition's slot
-  lightDirection: vec3<f32>,    //       208–219
-  ambient: f32,                 //       220–223   ← packed
-  lightColor: vec3<f32>,        //       224–235
-  specularStrength: f32,        //       236–239   ← packed
-};
+struct PerFrame {
+  viewProjection: mat4x4<f32>,
+  cameraPosition: vec3<f32>,
+  shininess: f32,
+  lightDirection: vec3<f32>,
+  ambient: f32,
+  lightColor: vec3<f32>,
+  specularStrength: f32,
+}
 
-@group(0) @binding(0) var<uniform> u: Uniforms;
-@group(0) @binding(1) var cubeTexture: texture_2d<f32>;
-@group(0) @binding(2) var cubeSampler: sampler;
+struct PerObject {
+  model: mat4x4<f32>,    
+  normalMatrix: mat4x4<f32>,
+}
+
+@group(0) @binding(0) var<uniform> frame: PerFrame;
+@group(0) @binding(1) var<uniform> object: PerObject;
+@group(0) @binding(2) var cubeTexture: texture_2d<f32>;
+@group(0) @binding(3) var cubeSampler: sampler;
 
 @vertex
 fn vs_main(@location(0) position: vec3<f32>, @location(1) normal: vec3<f32>, @location(2) uv: vec2<f32>) -> VertexOutput {
   var output: VertexOutput;
-  let worldPosition = u.model * vec4<f32>(position, 1.0);
-  output.clipPosition = u.viewProjection * worldPosition;
+  let worldPosition = object.model * vec4<f32>(position, 1.0);
+  output.clipPosition = frame.viewProjection * worldPosition;
   output.worldPosition = worldPosition.xyz;
-  output.worldNormal = normalize((u.normalMatrix * vec4<f32>(normal, 0.0)).xyz);
+  output.worldNormal = normalize((object.normalMatrix * vec4<f32>(normal, 0.0)).xyz);
   output.fragUV = uv;
   return output;
 }
@@ -38,15 +42,15 @@ fn vs_main(@location(0) position: vec3<f32>, @location(1) normal: vec3<f32>, @lo
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
   let N = normalize(in.worldNormal); // Blinn-Phong math
-  let L = normalize(u.lightDirection);
-  let V = normalize(u.cameraPosition - in.worldPosition);
+  let L = normalize(frame.lightDirection);
+  let V = normalize(frame.cameraPosition - in.worldPosition);
   let H = normalize(L + V);
 
-  let ambient = u.ambient;
+  let ambient = frame.ambient;
   let diffuse = max(dot(N, L), 0.0);
-  let specular = u.specularStrength * pow(max(dot(N, H), 0.0), u.shininess);
+  let specular = frame.specularStrength * pow(max(dot(N, H), 0.0), frame.shininess);
 
   let baseColor = textureSample(cubeTexture, cubeSampler, in.fragUV).rgb;
-  let color = (ambient + diffuse) * u.lightColor * baseColor + specular * u.lightColor;
+  let color = (ambient + diffuse) * frame.lightColor * baseColor + specular * frame.lightColor;
   return vec4<f32>(color, 1.0);
 }
