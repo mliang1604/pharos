@@ -46,8 +46,13 @@ export class Camera {
   get viewMatrix(): Mat4 {
     return mat4.lookAt(this.position, this.target, this.up);
   }
+
   get worldPosition(): Vec3 {
     return this.position;
+  }
+
+  setAspectRatio(aspectRatio: number): void {
+    this.aspectRatio = aspectRatio;
   }
 
   setView(position: Vec3, target: Vec3, up?: Vec3): void {

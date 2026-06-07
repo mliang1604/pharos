@@ -86,7 +86,6 @@ function startRenderLoop(
   context: GPUCanvasContext,
   material: Material,
   cubeMesh: Mesh,
-  depthTexture: GPUTexture,
   hud: ReturnType<typeof createHud>,
   camera: Camera,
   perFrame: UniformBuffer,
@@ -99,6 +98,22 @@ function startRenderLoop(
   let rotationalAngle = 0;
   const ANGULAR_SPEED = 1.0;
   let lastTime = performance.now();
+
+  let depthTexture = createDepthTexture(device, canvas.width, canvas.height);
+
+  // Resize handling
+  let needsResize = false;
+
+  new ResizeObserver(() => {
+    needsResize = true;
+  }).observe(canvas);
+
+  function handleResize(): void {
+    sizeCanvasToDisplay(canvas, device);
+    depthTexture.destroy();
+    depthTexture = createDepthTexture(device, canvas.width, canvas.height);
+    camera.setAspectRatio(canvas.width / canvas.height);
+  }
 
   function update(dt: number): void {
     rotationalAngle += ANGULAR_SPEED * dt;
@@ -173,6 +188,11 @@ function startRenderLoop(
   }
 
   function frame(now: number): void {
+    if (needsResize) {
+      handleResize();
+      needsResize = false;
+    }
+
     const dt = (now - lastTime) / 1000;
     lastTime = now;
     update(dt);
@@ -184,6 +204,15 @@ function startRenderLoop(
   }
 
   requestAnimationFrame(frame);
+}
+
+function createDepthTexture(device: GPUDevice, width: number, height: number): GPUTexture {
+  return device.createTexture({
+    label: 'cube depth texture',
+    size: [width, height],
+    format: 'depth24plus',
+    usage: GPUTextureUsage.RENDER_ATTACHMENT,
+  });
 }
 
 async function initScene(device: GPUDevice, context: GPUCanvasContext) {
@@ -217,14 +246,6 @@ async function initScene(device: GPUDevice, context: GPUCanvasContext) {
     `${import.meta.env.BASE_URL}textures/uv-grid.png`,
     'cube texture'
   );
-
-  // Adds depth texture
-  const depthTexture = device.createTexture({
-    label: 'cube depth texture',
-    size: [canvas.width, canvas.height],
-    format: 'depth24plus',
-    usage: GPUTextureUsage.RENDER_ATTACHMENT,
-  });
 
   // Each face: outward normal, then 4 corners as [x, y, z, u, v] (CCW).
   type Face = {
@@ -376,7 +397,6 @@ async function initScene(device: GPUDevice, context: GPUCanvasContext) {
     context,
     material,
     cubeMesh,
-    depthTexture,
     hud,
     camera,
     perFrame,
