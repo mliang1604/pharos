@@ -87,6 +87,17 @@ export class Node {
   }
 
   addChild(child: Node): void {
+    // Reject cycles before mutating anything: adding `child` here loops forever
+    // (getWorldMatrix/invalidateWorld recurse) if `child` is this node or one of
+    // its ancestors.
+    if (child === this) {
+      throw new Error('Node.addChild would create a cycle: a node cannot be its own child');
+    }
+    for (let ancestor = this._parent; ancestor !== null; ancestor = ancestor._parent) {
+      if (ancestor === child) {
+        throw new Error('Node.addChild would create a cycle: child is an ancestor of this node');
+      }
+    }
     child._parent?.removeChild(child);
     child._parent = this;
     this._children.push(child);

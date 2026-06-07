@@ -121,6 +121,34 @@ describe('Node', () => {
       expect(parent.children).not.toContain(child);
       expectMatrix(child.getWorldMatrix(), mat4.translation([1, 0, 0]));
     });
+
+    it('addChild rejects parenting a node to itself', () => {
+      const node = makeNode();
+      expect(() => node.addChild(node)).toThrow(/cycle/);
+    });
+
+    it('addChild rejects parenting a node under one of its descendants', () => {
+      const a = makeNode();
+      const b = makeNode();
+      const c = makeNode();
+      a.addChild(b);
+      b.addChild(c);
+
+      expect(() => c.addChild(a)).toThrow(/cycle/); // a is an ancestor of c
+    });
+
+    it('a rejected addChild leaves the graph unchanged', () => {
+      const a = makeNode();
+      const b = makeNode();
+      a.addChild(b);
+
+      expect(() => b.addChild(a)).toThrow(/cycle/);
+
+      expect(b.parent).toBe(a);
+      expect(a.parent).toBeNull();
+      expect(a.children).toContain(b);
+      expect(b.children).not.toContain(a);
+    });
   });
 
   describe('encapsulation', () => {
