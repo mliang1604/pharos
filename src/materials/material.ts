@@ -16,6 +16,7 @@ export class Material {
     depthStencil,
     primitive,
     label,
+    bindGroupLayout,
   }: {
     device: GPUDevice;
     shader: Shader;
@@ -25,10 +26,15 @@ export class Material {
     depthStencil?: GPUDepthStencilState;
     primitive?: GPUPrimitiveState;
     label?: string;
+    bindGroupLayout?: GPUBindGroupLayout;
   }) {
+    const layout = bindGroupLayout
+      ? device.createPipelineLayout({ bindGroupLayouts: [bindGroupLayout] })
+      : 'auto';
+
     this.pipeline = device.createRenderPipeline({
       ...(label && { label }),
-      layout: 'auto',
+      layout: layout,
       vertex: {
         module: shader.shaderModule,
         entryPoint: shader.vertexEntryPoint,
@@ -43,22 +49,20 @@ export class Material {
       ...(depthStencil && { depthStencil }),
     });
 
-    const bindGroupLayout = this.pipeline.getBindGroupLayout(0);
-
     this.bindGroup = device.createBindGroup({
       label: `${label ?? 'material'} bind group`,
-      layout: bindGroupLayout,
+      layout: bindGroupLayout ?? this.pipeline.getBindGroupLayout(0),
       entries,
     });
   }
 
-  bind(pass: GPURenderPassEncoder): void {
+  bind(pass: GPURenderPassEncoder, dynamicOffsets?: number[]): void {
     pass.setPipeline(this.pipeline);
     /**
      * This is always bind group 0 because this cube example holds per-frame,
      * per-material, and per-object resources in the same bind group for simplicity.
      * In a later implementation, we will replace with proper bindGroups from bindGroups.ts.
      */
-    pass.setBindGroup(0, this.bindGroup);
+    pass.setBindGroup(0, this.bindGroup, dynamicOffsets);
   }
 }
