@@ -62,4 +62,10 @@ describe('Camera', () => {
     camera.setView(vec3.fromValues(3, 4, 0), vec3.fromValues(0, 1, 0));
     expect(Array.from(camera.worldPosition)).toEqual([3, 4, 0]);
   });
+
+  it('setAspectRatio updates the projection (derived on read)', () => {
+    const camera = makeCamera();
+    camera.setAspectRatio(1);
+    expectMatrix(camera.projectionMatrix, mat4.perspective(Math.PI / 3, 1, 0.1, 100));
+  });
 });
