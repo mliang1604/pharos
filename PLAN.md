@@ -112,7 +112,7 @@ state.
 
 ---
 
-## Phase 2 — Asset Pipeline · ⏳ in progress (2/10 merged · #22 in review)
+## Phase 2 — Asset Pipeline · ⏳ in progress (3/10 merged)
 
 **Milestone goal:** Load real-world assets — glTF scenes with KTX2 textures — through a managed loader.
 
@@ -129,9 +129,9 @@ state.
   Map glTF material data to engine material. Defer the shader work to Phase 4.
   _Merged via #121: normalize glTF material → engine `PbrMaterial` (baseColor/metallic/roughness) with spec defaults, attached per renderable. Textures deferred to #22; shading to #35._
 
-- ⏳ **[#22](https://github.com/mliang1604/pharos/issues/22)** glTF: texture and sampler import `[assets]`
+- ✅ **[#22](https://github.com/mliang1604/pharos/issues/22)** glTF: texture and sampler import `[assets]`
   Wire glTF textures to the loader from Phase 1. Respect wrap/filter modes.
-  _In review (`feature/22_GltfTextureImport`): decode embedded (bufferView) images, map GL sampler enums → `GPUSamplerDescriptor`, load into an indexed `Texture[]`, attach `baseColorTexture` per material; demo renders the textured Duck. URI images deferred; other texture slots → #41._
+  _Merged via #122: decode embedded (bufferView) images, map GL sampler enums → `GPUSamplerDescriptor`, load into an indexed `Texture[]`, attach `baseColorTexture` per material; demo renders the textured Duck. URI images deferred; other texture slots → #41._
 
 - 🔲 **[#23](https://github.com/mliang1604/pharos/issues/23)** KTX2 / Basis Universal loader `[assets]`
   Integrate the KTX2 loader (transcoder WASM). Pick GPU-supported format from the adapter's feature list.
