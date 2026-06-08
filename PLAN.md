@@ -137,7 +137,7 @@ state.
   Integrate the KTX2 loader (transcoder WASM). Pick GPU-supported format from the adapter's feature list.
   _Merged via #128: device-feature negotiation, format selection (BC/ASTC/ETC2/RGBA32), Basis transcode via vendored Khronos WASM, compressed upload. Standalone loader + demo quad; glTF-native KTX2 deferred to #127._
 
-- 🔲 **[#24](https://github.com/mliang1604/pharos/issues/24)** `AssetManager`: async loading, caching, ref counting `[assets] [architecture]`
+- ⏳ **[#24](https://github.com/mliang1604/pharos/issues/24)** `AssetManager`: async loading, caching, ref counting `[assets] [architecture]`
   Single load per URL, dispose when ref count drops to zero. Promise-based API.
 
 - 🔲 **[#25](https://github.com/mliang1604/pharos/issues/25)** Loading state UX in the demo app `[ui]`
