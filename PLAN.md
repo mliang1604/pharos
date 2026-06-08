@@ -380,4 +380,7 @@ the plan still accounts for them.
 - ✅ **[#123](https://github.com/mliang1604/pharos/issues/123)** Document repo workflow conventions in CLAUDE.md `[docs]` ⚠ no milestone
   Capture the per-issue workflow, CI-gated merge sequence, PLAN↔GitHub alignment, and project constraints in a root `CLAUDE.md`. _Merged via #124._
 
+- ✅ **[#125](https://github.com/mliang1604/pharos/issues/125)** Models clip away when zooming out (far plane too near, zoom unbounded) `[rendering]` ⚠ no milestone
+  Raise the camera far plane (100 → 1000) and clamp `OrbitControls` `maxRadius` (200) so zoom can't recede the scene past the clip. _Merged via #126._
+
 ---
