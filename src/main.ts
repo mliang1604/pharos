@@ -8,7 +8,7 @@ import { Mesh } from '@/geometry/mesh';
 import { UniformBuffer } from '@/gpu/uniformBuffer';
 import { Shader } from '@/materials/shader';
 import { Material } from '@/materials/material';
-import { mat4, vec3 } from '@/math';
+import { mat4, vec3, type Mat4 } from '@/math';
 import { Texture } from '@/gpu/texture';
 import { loadGltf, type GltfScene } from '@/assets/gltf';
 
@@ -83,12 +83,15 @@ function sizeCanvasToDisplay(canvas: HTMLCanvasElement, device: GPUDevice): void
   canvas.height = height;
 }
 
-// The loaded glTF box rendered alongside the cubes: its scene graph, the
-// normals material, and a single MVP uniform reused across its renderables.
-type BoxRender = {
+// A loaded glTF model rendered alongside the cubes: its scene graph, the
+// normals material, its own MVP uniform (one per model, so models don't alias
+// each other's transform), and a demo-placement transform applied on top of
+// each renderable's world matrix.
+type GltfModel = {
   scene: GltfScene;
   material: Material;
   mvp: UniformBuffer;
+  transform: Mat4;
 };
 
 function startRenderLoop(
@@ -103,7 +106,7 @@ function startRenderLoop(
   positions: Float32Array<ArrayBufferLike>[],
   NUM_CUBES: number,
   ALIGN: number,
-  box: BoxRender
+  models: GltfModel[]
 ): void {
   // STATE
   let rotationalAngle = 0;
@@ -195,18 +198,20 @@ function startRenderLoop(
       cubeMesh.draw(pass);
     }
 
-    // The loaded glTF box. Scaled up so it reads as a centerpiece against the
-    // cube field, and tinted by surface normal (the unlit normals material).
-    // One MVP write per renderable is safe here because the box has a single
-    // renderable; multiple would alias the buffer and need the #18 treatment.
-    const demoModel = mat4.scaling([5, 5, 5]);
+    // The loaded glTF models, tinted by surface normal (the unlit normals
+    // material), each placed by its own demo transform along +Z (cubes → box →
+    // duck, front-to-back). Each model has its own MVP uniform, so one write
+    // per renderable is safe as long as a model has a single renderable;
+    // multiple per model would alias and need the #18 treatment.
     const mvpData = new Float32Array(16); // ArrayBuffer-backed scratch for the upload
-    for (const { node, mesh } of box.scene.renderables) {
-      const model = mat4.multiply(demoModel, node.getWorldMatrix());
-      mat4.multiply(viewProjection, model, mvpData); // write the product into the scratch
-      box.mvp.write(mvpData);
-      box.material.bind(pass);
-      mesh.draw(pass);
+    for (const model of models) {
+      for (const { node, mesh } of model.scene.renderables) {
+        const world = mat4.multiply(model.transform, node.getWorldMatrix());
+        mat4.multiply(viewProjection, world, mvpData); // product into the scratch
+        model.mvp.write(mvpData);
+        model.material.bind(pass);
+        mesh.draw(pass);
+      }
     }
 
     pass.end();
@@ -223,7 +228,8 @@ function startRenderLoop(
     lastTime = now;
     update(dt);
     render();
-    hud.frame(now, NUM_CUBES + box.scene.renderables.length);
+    const gltfDraws = models.reduce((n, m) => n + m.scene.renderables.length, 0);
+    hud.frame(now, NUM_CUBES + gltfDraws);
     requestAnimationFrame(frame);
   }
 
@@ -405,32 +411,52 @@ async function initScene(device: GPUDevice, context: GPUCanvasContext) {
     bindGroupLayout: bindGroupLayout,
   });
 
-  // --- glTF box (issue #20) ------------------------------------------------
-  // Load a real .glb and render it alongside the cubes with the normals
-  // material (position + normal only — the box has no UVs, so the textured
-  // cube material can't take it; real glTF materials are #21/#22).
-  const boxScene = await loadGltf(device, `${import.meta.env.BASE_URL}models/Box.glb`);
-  const firstRenderable = boxScene.renderables[0];
-  if (firstRenderable === undefined) {
-    throw new Error('Box.glb produced no renderables');
+  // --- glTF models (issues #20, #119) --------------------------------------
+  // Load real .glb files and render them alongside the cubes with the normals
+  // material (position + normal only — these models' textured materials are out
+  // of scope until #21/#22). Each model gets its own MVP uniform + material so
+  // they don't alias each other.
+  const normalsShader = new Shader({ device, code: normalsShaderCode, label: 'normals shader' });
+
+  async function loadModel(url: string, transform: Mat4): Promise<GltfModel> {
+    const scene = await loadGltf(device, url);
+    const first = scene.renderables[0];
+    if (first === undefined) {
+      throw new Error(`${url} produced no renderables`);
+    }
+    const mvp = new UniformBuffer(device, 64, `${url} mvp`); // one mat4x4<f32>
+    const bindGroupLayout = device.createBindGroupLayout({
+      label: `${url} bind group layout`,
+      entries: [{ binding: 0, visibility: GPUShaderStage.VERTEX, buffer: { type: 'uniform' } }],
+    });
+    const material = new Material({
+      device,
+      shader: normalsShader,
+      vertexBufferLayouts: [first.mesh.vertexBufferLayout],
+      targets: [{ format }],
+      entries: [{ binding: 0, resource: { buffer: mvp.buffer } }],
+      depthStencil: { depthWriteEnabled: true, depthCompare: 'less', format: 'depth24plus' },
+      label: `${url} material`,
+      bindGroupLayout,
+    });
+    return { scene, material, mvp, transform };
   }
 
-  const normalsShader = new Shader({ device, code: normalsShaderCode, label: 'normals shader' });
-  const boxMvp = new UniformBuffer(device, 64, 'box mvp'); // one mat4x4<f32>
-  const boxBindGroupLayout = device.createBindGroupLayout({
-    label: 'box bind group layout',
-    entries: [{ binding: 0, visibility: GPUShaderStage.VERTEX, buffer: { type: 'uniform' } }],
-  });
-  const boxMaterial = new Material({
-    device,
-    shader: normalsShader,
-    vertexBufferLayouts: [firstRenderable.mesh.vertexBufferLayout],
-    targets: [{ format }],
-    entries: [{ binding: 0, resource: { buffer: boxMvp.buffer } }],
-    depthStencil: { depthWriteEnabled: true, depthCompare: 'less', format: 'depth24plus' },
-    label: 'box material',
-    bindGroupLayout: boxBindGroupLayout,
-  });
+  // Placed front-to-back along +Z (toward the default camera): cubes at z=0,
+  // then the unit Box at z=5, then the Duck (recentered, scaled) at z=12.
+  const models: GltfModel[] = [
+    await loadModel(
+      `${import.meta.env.BASE_URL}models/Box.glb`,
+      mat4.multiply(mat4.translation([0, 0, 5]), mat4.scaling([5, 5, 5]))
+    ),
+    await loadModel(
+      `${import.meta.env.BASE_URL}models/Duck.glb`,
+      mat4.multiply(
+        mat4.translation([0, 0, 12]),
+        mat4.multiply(mat4.scaling([4.8, 4.8, 4.8]), mat4.translation([-0.134, -0.869, 0.037]))
+      )
+    ),
+  ];
 
   const hudCanvas = requireElement<HTMLCanvasElement>('#debug-hud');
   const hud = createHud(hudCanvas);
@@ -455,7 +481,7 @@ async function initScene(device: GPUDevice, context: GPUCanvasContext) {
     positions,
     NUM_CUBES,
     ALIGN,
-    { scene: boxScene, material: boxMaterial, mvp: boxMvp }
+    models
   );
   setStatus(
     `Pharos — clearing at ${format}, and drawing a rotating cube. Drag to rotate the orbital camera; scroll to zoom.`
