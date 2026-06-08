@@ -13,9 +13,16 @@ import type {
 import type { VertexFormat } from '@/geometry/vertexFormats';
 import { mat4, quat, vec3 } from '@/math';
 
+export interface PbrMaterial {
+  baseColor: [number, number, number, number];
+  metallic: number;
+  roughness: number;
+}
+
 export interface Renderable {
   node: Node;
   mesh: Mesh;
+  material: PbrMaterial;
 }
 
 export interface GltfScene {
@@ -278,9 +285,28 @@ export function buildScene(device: GPUDevice, json: GltfJson, bin: ArrayBuffer):
       return;
     }
     for (const primitive of mesh.primitives) {
-      renderables.push({ node, mesh: buildMesh(device, json, bin, primitive) });
+      renderables.push({
+        node,
+        mesh: buildMesh(device, json, bin, primitive),
+        material: buildMaterial(json, primitive),
+      });
     }
   });
 
   return { roots, renderables };
+}
+
+export function buildMaterial(json: GltfJson, primitive: GltfPrimitive): PbrMaterial {
+  // get gltfMaterial
+  let gltfMaterial = undefined;
+  if (primitive.material !== undefined) {
+    gltfMaterial = json.materials?.[primitive.material];
+  }
+  // get properties
+  const pbr = gltfMaterial?.pbrMetallicRoughness;
+  const baseColor = (pbr?.baseColorFactor ?? [1, 1, 1, 1]) as [number, number, number, number];
+  const metallic = pbr?.metallicFactor ?? 1;
+  const roughness = pbr?.roughnessFactor ?? 1;
+
+  return { baseColor, metallic, roughness };
 }

@@ -1,12 +1,22 @@
 // Copyright (c) 2026 Michael Liang
 // SPDX-License-Identifier: MIT
 
+export interface GltfMaterial {
+  name?: string;
+  pbrMetallicRoughness?: {
+    baseColorFactor?: number[];
+    metallicFactor?: number;
+    roughnessFactor?: number;
+  };
+}
+
 export interface GltfJson {
   asset: { version: string };
   scene?: number; // index of the default scene
   scenes: GltfSceneDef[]; // each: { nodes?: number[] }   (root node indices)
   nodes: GltfNode[];
   meshes: GltfMesh[];
+  materials?: GltfMaterial[];
   accessors: GltfAccessor[];
   bufferViews: GltfBufferView[];
   buffers: GltfBuffer[];

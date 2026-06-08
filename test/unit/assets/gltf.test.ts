@@ -6,9 +6,11 @@ import {
   decodeAccessor,
   buildVertexData,
   buildNode,
+  buildMaterial,
   buildScene,
   loadGltf,
 } from '@/assets/gltf';
+import type { GltfPrimitive } from '@/assets/gltfTypes';
 
 // --- Fixture plumbing -------------------------------------------------------
 // Read a real .glb off disk as a standalone ArrayBuffer.
@@ -181,6 +183,46 @@ describe('gltf', () => {
         // Box: scene node 0 is the root; its child node 1 carries the mesh.
         expect(scene.renderables[0]?.node.parent).toBe(scene.roots[0]);
       });
+    });
+  });
+
+  describe('buildMaterial', () => {
+    it('reads Box baseColorFactor (red) + metallic, with default roughness', () => {
+      const { json } = parseGlb(boxGlb);
+      const primitive = json.meshes[0]?.primitives[0];
+      if (primitive === undefined) {
+        throw new Error('fixture has no primitive');
+      }
+      const mat = buildMaterial(json, primitive);
+
+      expect(mat.baseColor[0]).toBeCloseTo(0.8); // baseColorFactor red channel
+      expect(mat.baseColor.slice(1)).toEqual([0, 0, 1]); // g, b, a
+      expect(mat.metallic).toBe(0); // metallicFactor: 0
+      expect(mat.roughness).toBe(1); // unspecified → spec default
+    });
+
+    it('defaults unspecified factors (Duck has no baseColorFactor)', () => {
+      const { json } = parseGlb(duckGlb);
+      const primitive = json.meshes[0]?.primitives[0];
+      if (primitive === undefined) {
+        throw new Error('fixture has no primitive');
+      }
+      const mat = buildMaterial(json, primitive);
+
+      expect(mat.baseColor).toEqual([1, 1, 1, 1]); // no baseColorFactor → white
+      expect(mat.metallic).toBe(0); // Duck specifies metallicFactor: 0
+      expect(mat.roughness).toBe(1); // default
+    });
+
+    it('uses the glTF default material when a primitive has none', () => {
+      const { json } = parseGlb(boxGlb);
+      const primitive: GltfPrimitive = { attributes: {} }; // no material index
+      const mat = buildMaterial(json, primitive);
+
+      // The spec default material: white, fully metallic, fully rough.
+      expect(mat.baseColor).toEqual([1, 1, 1, 1]);
+      expect(mat.metallic).toBe(1);
+      expect(mat.roughness).toBe(1);
     });
   });
 
