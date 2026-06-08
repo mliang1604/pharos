@@ -29,6 +29,7 @@ function loadGlbFixture(relPathFromHere: string): ArrayBuffer {
 
 const boxGlb = loadGlbFixture('../../../public/models/Box.glb');
 const duckGlb = loadGlbFixture('../../../public/models/Duck.glb');
+const damagedHelmetGlb = loadGlbFixture('../../../public/models/DamagedHelmet.glb');
 
 // GPUBufferUsage is a runtime global in browsers but absent in Node; Mesh reads
 // it when allocating vertex/index buffers. Values are arbitrary for the mock.
@@ -335,6 +336,34 @@ describe('gltf', () => {
 
       expect(indices).toBeInstanceOf(Uint16Array);
       expect(indices.length).toBe(12636);
+    });
+  });
+
+  // The shipped industry-standard PBR asset (#26). Single flat node, ~14.5k
+  // verts, baseColor + 4 unused PBR maps. A guard that the real file the demo
+  // loads stays parseable; placeholder (baseColor-only) shading until Phase 4.
+  describe('DamagedHelmet.glb (shipped-asset regression)', () => {
+    it('interleaves its 3-attribute mesh (14556 verts × stride 8)', () => {
+      const { json, bin } = parseGlb(damagedHelmetGlb);
+      const primitive = json.meshes[0]?.primitives[0];
+      if (primitive === undefined) {
+        throw new Error('fixture has no primitive');
+      }
+      const { vertices, formats } = buildVertexData(json, bin, primitive);
+
+      expect(formats).toEqual(['float32x3', 'float32x3', 'float32x2']);
+      expect(vertices.length).toBe(14556 * 8);
+    });
+
+    it('resolves a baseColorTexture so the demo takes the textured path', () => {
+      const fakeTexture = {} as Texture;
+      const { json } = parseGlb(damagedHelmetGlb);
+      const primitive = json.meshes[0]?.primitives[0];
+      if (primitive === undefined) {
+        throw new Error('fixture has no primitive');
+      }
+
+      expect(buildMaterial(json, primitive, [fakeTexture]).baseColorTexture).toBe(fakeTexture);
     });
   });
 });
