@@ -24,6 +24,7 @@ function loadGlbFixture(relPathFromHere: string): ArrayBuffer {
 }
 
 const boxGlb = loadGlbFixture('../../../public/models/Box.glb');
+const duckGlb = loadGlbFixture('../../../public/models/Duck.glb');
 
 // GPUBufferUsage is a runtime global in browsers but absent in Node; Mesh reads
 // it when allocating vertex/index buffers. Values are arbitrary for the mock.
@@ -205,6 +206,45 @@ describe('gltf', () => {
       ) as unknown as typeof fetch;
 
       await expect(loadGltf(createMockDevice(), '/missing.glb')).rejects.toThrow('404');
+    });
+  });
+
+  // A second, structurally different fixture — multiple/nested nodes, matrix
+  // transforms, a 3-attribute mesh, ~2.4k verts / 12.6k indices — to prove the
+  // loader isn't special-cased to Box.glb. (#119)
+  describe('Duck.glb (second-fixture regression)', () => {
+    it('assembles one nested renderable from a multi-node scene', () => {
+      const { json, bin } = parseGlb(duckGlb);
+      const scene = buildScene(createMockDevice(), json, bin);
+
+      expect(scene.roots).toHaveLength(1);
+      expect(scene.renderables).toHaveLength(1);
+      // The mesh node is nested under the root (real hierarchy, not flat).
+      expect(scene.renderables[0]?.node.parent).toBe(scene.roots[0]);
+    });
+
+    it('interleaves a 3-attribute mesh (POSITION + NORMAL + TEXCOORD_0)', () => {
+      const { json, bin } = parseGlb(duckGlb);
+      const primitive = json.meshes[0]?.primitives[0];
+      if (primitive === undefined) {
+        throw new Error('fixture has no primitive');
+      }
+      const { vertices, formats } = buildVertexData(json, bin, primitive);
+
+      expect(formats).toEqual(['float32x3', 'float32x3', 'float32x2']);
+      expect(vertices.length).toBe(2399 * 8); // 2399 verts × stride 8
+    });
+
+    it('decodes the u16 index buffer (12636 indices)', () => {
+      const { json, bin } = parseGlb(duckGlb);
+      const primitive = json.meshes[0]?.primitives[0];
+      if (primitive === undefined || primitive.indices === undefined) {
+        throw new Error('fixture has no indices');
+      }
+      const indices = decodeAccessor(json, bin, primitive.indices);
+
+      expect(indices).toBeInstanceOf(Uint16Array);
+      expect(indices.length).toBe(12636);
     });
   });
 });
