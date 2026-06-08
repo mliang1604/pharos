@@ -112,7 +112,7 @@ state.
 
 ---
 
-## Phase 2 — Asset Pipeline · ⏳ in progress (3/10 merged · #23 in review)
+## Phase 2 — Asset Pipeline · ⏳ in progress (4/10 merged)
 
 **Milestone goal:** Load real-world assets — glTF scenes with KTX2 textures — through a managed loader.
 
@@ -133,9 +133,9 @@ state.
   Wire glTF textures to the loader from Phase 1. Respect wrap/filter modes.
   _Merged via #122: decode embedded (bufferView) images, map GL sampler enums → `GPUSamplerDescriptor`, load into an indexed `Texture[]`, attach `baseColorTexture` per material; demo renders the textured Duck. URI images deferred; other texture slots → #41._
 
-- ⏳ **[#23](https://github.com/mliang1604/pharos/issues/23)** KTX2 / Basis Universal loader `[assets]`
+- ✅ **[#23](https://github.com/mliang1604/pharos/issues/23)** KTX2 / Basis Universal loader `[assets]`
   Integrate the KTX2 loader (transcoder WASM). Pick GPU-supported format from the adapter's feature list.
-  _In review (`feature/23_Ktx2Loader`): device-feature negotiation, format selection (BC/ASTC/ETC2/RGBA32), Basis transcode via vendored Khronos WASM, compressed upload. Standalone loader + demo quad; glTF-native KTX2 deferred to #127._
+  _Merged via #128: device-feature negotiation, format selection (BC/ASTC/ETC2/RGBA32), Basis transcode via vendored Khronos WASM, compressed upload. Standalone loader + demo quad; glTF-native KTX2 deferred to #127._
 
 - 🔲 **[#24](https://github.com/mliang1604/pharos/issues/24)** `AssetManager`: async loading, caching, ref counting `[assets] [architecture]`
   Single load per URL, dispose when ref count drops to zero. Promise-based API.
