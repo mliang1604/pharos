@@ -63,6 +63,14 @@ export class Material {
      * per-material, and per-object resources in the same bind group for simplicity.
      * In a later implementation, we will replace with proper bindGroups from bindGroups.ts.
      */
-    pass.setBindGroup(0, this.bindGroup, dynamicOffsets);
+    // Omit the offsets argument entirely when there are none: passing an
+    // explicit `undefined` makes setBindGroup try to convert it to a sequence
+    // and throw. Materials with no dynamic-offset bindings (e.g. the glTF
+    // normals material) call bind() without offsets.
+    if (dynamicOffsets === undefined) {
+      pass.setBindGroup(0, this.bindGroup);
+    } else {
+      pass.setBindGroup(0, this.bindGroup, dynamicOffsets);
+    }
   }
 }

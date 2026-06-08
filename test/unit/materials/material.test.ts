@@ -134,7 +134,9 @@ describe('Material', () => {
     material.bind(pass);
 
     expect(pass.setPipeline).toHaveBeenCalledWith(pipeline);
-    expect(pass.setBindGroup).toHaveBeenCalledWith(0, bindGroup, undefined);
+    // No dynamic offsets → the third argument is omitted (passing an explicit
+    // undefined makes setBindGroup throw "cannot be converted to a sequence").
+    expect(pass.setBindGroup).toHaveBeenCalledWith(0, bindGroup);
   });
 
   it('bind forwards dynamic offsets to setBindGroup', () => {
