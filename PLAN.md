@@ -377,7 +377,7 @@ the plan still accounts for them.
 - ✅ **[#119](https://github.com/mliang1604/pharos/issues/119)** Showcase a second glTF model and add a Duck loader regression test `[assets]` ⚠ no milestone
   Follow-up to #20: render cubes → Box → Duck front-to-back in the demo, and add `Duck.glb` as a permanent second fixture proving the loader isn't Box-specific. _Merged via #120._
 
-- ⏳ **[#123](https://github.com/mliang1604/pharos/issues/123)** Document repo workflow conventions in CLAUDE.md `[docs]` ⚠ no milestone
-  Capture the per-issue workflow, CI-gated merge sequence, PLAN↔GitHub alignment, and project constraints in a root `CLAUDE.md`. _In review (`feature/123_WorkflowDocs`)._
+- ✅ **[#123](https://github.com/mliang1604/pharos/issues/123)** Document repo workflow conventions in CLAUDE.md `[docs]` ⚠ no milestone
+  Capture the per-issue workflow, CI-gated merge sequence, PLAN↔GitHub alignment, and project constraints in a root `CLAUDE.md`. _Merged via #124._
 
 ---
