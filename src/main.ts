@@ -280,11 +280,7 @@ async function initScene(device: GPUDevice, context: GPUCanvasContext) {
     {}
   );
 
-  const cubeTexture = await Texture.load(
-    device,
-    assetUrl('textures/uv-grid.png'),
-    'cube texture'
-  );
+  const cubeTexture = await Texture.load(device, assetUrl('textures/uv-grid.png'), 'cube texture');
 
   // Each face: outward normal, then 4 corners as [x, y, z, u, v] (CCW).
   type Face = {
@@ -493,6 +489,10 @@ async function initScene(device: GPUDevice, context: GPUCanvasContext) {
         mat4.multiply(mat4.scaling([4.8, 4.8, 4.8]), mat4.translation([-0.134, -0.869, 0.037]))
       )
     ),
+    await loadModel(
+      assetUrl('models/DamagedHelmet.glb'),
+      mat4.multiply(mat4.translation([0, 7, 6]), mat4.scaling([3, 3, 3]))
+    ),
   ];
 
   // --- KTX2 (#23) ----------------------------------------------------------
@@ -504,8 +504,8 @@ async function initScene(device: GPUDevice, context: GPUCanvasContext) {
     device,
     // Unit quad in XY facing +Z; interleaved pos/normal/uv to match textured.wgsl.
     vertices: new Float32Array([
-      -1, -1, 0, 0, 0, 1, 0, 1, 1, -1, 0, 0, 0, 1, 1, 1, 1, 1, 0, 0, 0, 1, 1, 0, -1, 1, 0, 0, 0, 1, 0,
-      0,
+      -1, -1, 0, 0, 0, 1, 0, 1, 1, -1, 0, 0, 0, 1, 1, 1, 1, 1, 0, 0, 0, 1, 1, 0, -1, 1, 0, 0, 0, 1,
+      0, 0,
     ]),
     formats: ['float32x3', 'float32x3', 'float32x2'],
     indices: new Uint16Array([0, 1, 2, 0, 2, 3]),
@@ -540,7 +540,12 @@ async function initScene(device: GPUDevice, context: GPUCanvasContext) {
         {
           node: ktx2Node,
           mesh: quadMesh,
-          material: { baseColor: [1, 1, 1, 1], metallic: 0, roughness: 1, baseColorTexture: ktx2Texture },
+          material: {
+            baseColor: [1, 1, 1, 1],
+            metallic: 0,
+            roughness: 1,
+            baseColorTexture: ktx2Texture,
+          },
         },
       ],
     },

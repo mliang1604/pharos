@@ -144,7 +144,7 @@ state.
 - 🔲 **[#25](https://github.com/mliang1604/pharos/issues/25)** Loading state UX in the demo app `[ui]`
   Simple progress bar while a scene loads. Useful for spotting blocking work.
 
-- 🔲 **[#26](https://github.com/mliang1604/pharos/issues/26)** Test asset: load the Damaged Helmet glTF `[assets] [docs]`
+- ⏳ **[#26](https://github.com/mliang1604/pharos/issues/26)** Test asset: load the Damaged Helmet glTF `[assets] [docs]`
   Industry-standard PBR test asset. Should render with placeholder shading; PBR comes in Phase 4.
 
 - 🔲 **[#27](https://github.com/mliang1604/pharos/issues/27)** Test asset: load the Sponza scene `[assets]`
