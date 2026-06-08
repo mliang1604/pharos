@@ -262,13 +262,13 @@ async function initScene(device: GPUDevice, context: GPUCanvasContext) {
     fieldOfView: (60 * Math.PI) / 180,
     aspectRatio: canvas.width / canvas.height,
     near: 0.1,
-    far: 100.0,
+    far: 1000.0,
   });
   new OrbitControls(
     camera,
     canvas,
     { radius: 25, azimuth: 0, elevation: 0, target: vec3.fromValues(0, 0, 0) },
-    {},
+    { maxRadius: 200 }, // stay well inside the camera's far plane (1000) so the scene never clips
     {}
   );
 
