@@ -12,7 +12,7 @@ import { mat4, vec3, quat, type Mat4 } from '@/math';
 import { Node } from '@/scene/node';
 import { Texture } from '@/gpu/texture';
 import { loadKtx2Texture } from '@/gpu/ktx2';
-import { loadGltf, type GltfScene } from '@/assets/gltf';
+import { loadGltf, type GltfScene, type Renderable } from '@/assets/gltf';
 import { assetUrl } from '@/assets/assetUrl';
 
 import cubeShaderCode from '@/materials/shaders/cube.wgsl?raw';
@@ -98,7 +98,7 @@ function sizeCanvasToDisplay(canvas: HTMLCanvasElement, device: GPUDevice): void
 // each renderable's world matrix.
 type GltfModel = {
   scene: GltfScene;
-  material: Material;
+  materials: Material[];
   mvp: UniformBuffer;
   transform: Mat4;
 };
@@ -207,18 +207,16 @@ function startRenderLoop(
       cubeMesh.draw(pass);
     }
 
-    // The loaded glTF models, tinted by surface normal (the unlit normals
-    // material), each placed by its own demo transform along +Z (cubes → box →
-    // duck, front-to-back). Each model has its own MVP uniform, so one write
-    // per renderable is safe as long as a model has a single renderable;
-    // multiple per model would alias and need the #18 treatment.
+    // Each model has one MVP uniform. Its renderables share a transform (Sponza is a single node),
+    // so re-writing the same matrix per renderable is idempotent. A model whose renderables had
+    // differing transforms would alias and need per-renderable MVPs (#18).
     const mvpData = new Float32Array(16); // ArrayBuffer-backed scratch for the upload
     for (const model of models) {
-      for (const { node, mesh } of model.scene.renderables) {
+      for (const [i, { node, mesh }] of model.scene.renderables.entries()) {
         const world = mat4.multiply(model.transform, node.getWorldMatrix());
         mat4.multiply(viewProjection, world, mvpData); // product into the scratch
         model.mvp.write(mvpData);
-        model.material.bind(pass);
+        model.materials[i]?.bind(pass);
         mesh.draw(pass);
       }
     }
@@ -238,7 +236,7 @@ function startRenderLoop(
     update(dt);
     render();
     const gltfDraws = models.reduce((n, m) => n + m.scene.renderables.length, 0);
-    hud.frame(now, NUM_CUBES + gltfDraws);
+    hud.frame(now, positions.length + gltfDraws);
     requestAnimationFrame(frame);
   }
 
@@ -263,6 +261,10 @@ async function initScene(device: GPUDevice, context: GPUCanvasContext) {
     alphaMode: 'opaque',
   });
 
+  // Startup scene selector: `?scene=sponza` loads the Sponza atrium on its own;
+  // anything else builds the object showcase (cubes + glTF models + KTX2 quad).
+  const isSponza = new URLSearchParams(location.search).get('scene') === 'sponza';
+
   const camera = new Camera({
     position: vec3.fromValues(0, 0, 5),
     target: vec3.fromValues(0, 0, 0),
@@ -275,7 +277,9 @@ async function initScene(device: GPUDevice, context: GPUCanvasContext) {
   new OrbitControls(
     camera,
     canvas,
-    { radius: 25, azimuth: 0, elevation: 0, target: vec3.fromValues(0, 0, 0) },
+    isSponza
+      ? { radius: 0.5, azimuth: Math.PI / 2, elevation: 0.15, target: vec3.fromValues(0, 4, 0) }
+      : { radius: 25, azimuth: 0, elevation: 0, target: vec3.fromValues(0, 0, 0) },
     { maxRadius: 200 }, // stay well inside the camera's far plane (1000) so the scene never clips
     {}
   );
@@ -430,137 +434,146 @@ async function initScene(device: GPUDevice, context: GPUCanvasContext) {
 
   async function loadModel(url: string, transform: Mat4): Promise<GltfModel> {
     const scene = await loadGltf(device, url);
-    const first = scene.renderables[0];
-    if (first === undefined) {
+    if (scene.renderables.length === 0) {
       throw new Error(`${url} produced no renderables`);
     }
     const mvp = new UniformBuffer(device, 64, `${url} mvp`); // one mat4x4<f32>
+    const materials = scene.renderables.map(materialFor);
 
-    let bindGroupLayout = device.createBindGroupLayout({
-      label: `${url} bind group layout`,
-      entries: [{ binding: 0, visibility: GPUShaderStage.VERTEX, buffer: { type: 'uniform' } }],
-    });
-    let shader = normalsShader;
-    let entries: GPUBindGroupEntry[] = [{ binding: 0, resource: { buffer: mvp.buffer } }];
+    return { scene, materials, mvp, transform };
 
-    if (first.material.baseColorTexture !== undefined) {
-      shader = texturedShader;
-      bindGroupLayout = device.createBindGroupLayout({
+    function materialFor(renderable: Renderable): Material {
+      let bindGroupLayout = device.createBindGroupLayout({
         label: `${url} bind group layout`,
+        entries: [{ binding: 0, visibility: GPUShaderStage.VERTEX, buffer: { type: 'uniform' } }],
+      });
+      let shader = normalsShader;
+      let entries: GPUBindGroupEntry[] = [{ binding: 0, resource: { buffer: mvp.buffer } }];
+
+      if (renderable.material.baseColorTexture !== undefined) {
+        shader = texturedShader;
+        bindGroupLayout = device.createBindGroupLayout({
+          label: `${url} bind group layout`,
+          entries: [
+            { binding: 0, visibility: GPUShaderStage.VERTEX, buffer: { type: 'uniform' } },
+            { binding: 1, visibility: GPUShaderStage.FRAGMENT, texture: {} },
+            { binding: 2, visibility: GPUShaderStage.FRAGMENT, sampler: {} },
+          ],
+        });
+
+        const texture = renderable.material.baseColorTexture; // the Texture | undefined — you've already checked it's defined in this branch
+        entries = [
+          { binding: 0, resource: { buffer: mvp.buffer } },
+          { binding: 1, resource: texture.texture.createView() }, // GPUTexture → a view
+          { binding: 2, resource: texture.sampler }, // the GPUSampler
+        ];
+      }
+
+      return new Material({
+        device,
+        shader: shader,
+        vertexBufferLayouts: [renderable.mesh.vertexBufferLayout],
+        targets: [{ format }],
+        entries: entries,
+        depthStencil: { depthWriteEnabled: true, depthCompare: 'less', format: 'depth24plus' },
+        label: `${url} material`,
+        bindGroupLayout,
+      });
+    }
+  }
+
+  // Sponza loads as the lone model (its own scene); otherwise the showcase set,
+  // placed front-to-back along +Z: the unit Box at z=5, the Duck at z=12, the
+  // DamagedHelmet up at y=7. Sponza uses an identity transform (tune in-browser).
+  const models: GltfModel[] = isSponza
+    ? [await loadModel(assetUrl('models/Sponza/Sponza.gltf'), mat4.translation([0, 0, 0]))]
+    : [
+        await loadModel(
+          assetUrl('models/Box.glb'),
+          mat4.multiply(mat4.translation([0, 0, 5]), mat4.scaling([5, 5, 5]))
+        ),
+        await loadModel(
+          assetUrl('models/Duck.glb'),
+          mat4.multiply(
+            mat4.translation([0, 0, 12]),
+            mat4.multiply(mat4.scaling([4.8, 4.8, 4.8]), mat4.translation([-0.134, -0.869, 0.037]))
+          )
+        ),
+        await loadModel(
+          assetUrl('models/DamagedHelmet.glb'),
+          mat4.multiply(mat4.translation([0, 7, 6]), mat4.scaling([3, 3, 3]))
+        ),
+      ];
+
+  // --- KTX2 (#23) ----------------------------------------------------------
+  // Render the transcoded KTX2 photo on a quad. Standalone (hand-built model) —
+  // glTF would reference KTX2 via the KHR_texture_basisu extension (a follow-up).
+  // Showcase only; skipped (no fetch/transcode) for the Sponza scene.
+  if (!isSponza) {
+    const ktx2Bytes = await (await fetch(assetUrl('textures/test.ktx2'))).arrayBuffer();
+    const ktx2Texture = await loadKtx2Texture(device, ktx2Bytes, Texture.DEFAULT_SAMPLER);
+    const quadMesh = new Mesh({
+      device,
+      // Unit quad in XY facing +Z; interleaved pos/normal/uv to match textured.wgsl.
+      vertices: new Float32Array([
+        -1, -1, 0, 0, 0, 1, 0, 1, 1, -1, 0, 0, 0, 1, 1, 1, 1, 1, 0, 0, 0, 1, 1, 0, -1, 1, 0, 0, 0,
+        1, 0, 0,
+      ]),
+      formats: ['float32x3', 'float32x3', 'float32x2'],
+      indices: new Uint16Array([0, 1, 2, 0, 2, 3]),
+    });
+    const ktx2Mvp = new UniformBuffer(device, 64, 'ktx2 mvp');
+    const ktx2Material = new Material({
+      device,
+      shader: texturedShader,
+      vertexBufferLayouts: [quadMesh.vertexBufferLayout],
+      targets: [{ format }],
+      entries: [
+        { binding: 0, resource: { buffer: ktx2Mvp.buffer } },
+        { binding: 1, resource: ktx2Texture.texture.createView() },
+        { binding: 2, resource: ktx2Texture.sampler },
+      ],
+      depthStencil: { depthWriteEnabled: true, depthCompare: 'less', format: 'depth24plus' },
+      label: 'ktx2 material',
+      bindGroupLayout: device.createBindGroupLayout({
+        label: 'ktx2 bind group layout',
         entries: [
           { binding: 0, visibility: GPUShaderStage.VERTEX, buffer: { type: 'uniform' } },
           { binding: 1, visibility: GPUShaderStage.FRAGMENT, texture: {} },
           { binding: 2, visibility: GPUShaderStage.FRAGMENT, sampler: {} },
         ],
-      });
-
-      const texture = first.material.baseColorTexture; // the Texture | undefined — you've already checked it's defined in this branch
-      entries = [
-        { binding: 0, resource: { buffer: mvp.buffer } },
-        { binding: 1, resource: texture.texture.createView() }, // GPUTexture → a view
-        { binding: 2, resource: texture.sampler }, // the GPUSampler
-      ];
-    }
-
-    const material = new Material({
-      device,
-      shader: shader,
-      vertexBufferLayouts: [first.mesh.vertexBufferLayout],
-      targets: [{ format }],
-      entries: entries,
-      depthStencil: { depthWriteEnabled: true, depthCompare: 'less', format: 'depth24plus' },
-      label: `${url} material`,
-      bindGroupLayout,
+      }),
     });
-    return { scene, material, mvp, transform };
-  }
-
-  // Placed front-to-back along +Z (toward the default camera): cubes at z=0,
-  // then the unit Box at z=5, then the Duck (recentered, scaled) at z=12.
-  const models: GltfModel[] = [
-    await loadModel(
-      assetUrl('models/Box.glb'),
-      mat4.multiply(mat4.translation([0, 0, 5]), mat4.scaling([5, 5, 5]))
-    ),
-    await loadModel(
-      assetUrl('models/Duck.glb'),
-      mat4.multiply(
-        mat4.translation([0, 0, 12]),
-        mat4.multiply(mat4.scaling([4.8, 4.8, 4.8]), mat4.translation([-0.134, -0.869, 0.037]))
-      )
-    ),
-    await loadModel(
-      assetUrl('models/DamagedHelmet.glb'),
-      mat4.multiply(mat4.translation([0, 7, 6]), mat4.scaling([3, 3, 3]))
-    ),
-  ];
-
-  // --- KTX2 (#23) ----------------------------------------------------------
-  // Render the transcoded KTX2 photo on a quad. Standalone (hand-built model) —
-  // glTF would reference KTX2 via the KHR_texture_basisu extension (a follow-up).
-  const ktx2Bytes = await (await fetch(assetUrl('textures/test.ktx2'))).arrayBuffer();
-  const ktx2Texture = await loadKtx2Texture(device, ktx2Bytes, Texture.DEFAULT_SAMPLER);
-  const quadMesh = new Mesh({
-    device,
-    // Unit quad in XY facing +Z; interleaved pos/normal/uv to match textured.wgsl.
-    vertices: new Float32Array([
-      -1, -1, 0, 0, 0, 1, 0, 1, 1, -1, 0, 0, 0, 1, 1, 1, 1, 1, 0, 0, 0, 1, 1, 0, -1, 1, 0, 0, 0, 1,
-      0, 0,
-    ]),
-    formats: ['float32x3', 'float32x3', 'float32x2'],
-    indices: new Uint16Array([0, 1, 2, 0, 2, 3]),
-  });
-  const ktx2Mvp = new UniformBuffer(device, 64, 'ktx2 mvp');
-  const ktx2Material = new Material({
-    device,
-    shader: texturedShader,
-    vertexBufferLayouts: [quadMesh.vertexBufferLayout],
-    targets: [{ format }],
-    entries: [
-      { binding: 0, resource: { buffer: ktx2Mvp.buffer } },
-      { binding: 1, resource: ktx2Texture.texture.createView() },
-      { binding: 2, resource: ktx2Texture.sampler },
-    ],
-    depthStencil: { depthWriteEnabled: true, depthCompare: 'less', format: 'depth24plus' },
-    label: 'ktx2 material',
-    bindGroupLayout: device.createBindGroupLayout({
-      label: 'ktx2 bind group layout',
-      entries: [
-        { binding: 0, visibility: GPUShaderStage.VERTEX, buffer: { type: 'uniform' } },
-        { binding: 1, visibility: GPUShaderStage.FRAGMENT, texture: {} },
-        { binding: 2, visibility: GPUShaderStage.FRAGMENT, sampler: {} },
-      ],
-    }),
-  });
-  const ktx2Node = new Node(vec3.fromValues(0, 0, 0), quat.identity(), vec3.fromValues(1, 1, 1));
-  models.push({
-    scene: {
-      roots: [ktx2Node],
-      renderables: [
-        {
-          node: ktx2Node,
-          mesh: quadMesh,
-          material: {
-            baseColor: [1, 1, 1, 1],
-            metallic: 0,
-            roughness: 1,
-            baseColorTexture: ktx2Texture,
+    const ktx2Node = new Node(vec3.fromValues(0, 0, 0), quat.identity(), vec3.fromValues(1, 1, 1));
+    models.push({
+      scene: {
+        roots: [ktx2Node],
+        renderables: [
+          {
+            node: ktx2Node,
+            mesh: quadMesh,
+            material: {
+              baseColor: [1, 1, 1, 1],
+              metallic: 0,
+              roughness: 1,
+              baseColorTexture: ktx2Texture,
+            },
           },
-        },
-      ],
-    },
-    material: ktx2Material,
-    mvp: ktx2Mvp,
-    // Left of the grid, scaled to the 512x768 (2:3) aspect.
-    transform: mat4.multiply(mat4.translation([-18, 0, 8]), mat4.scaling([5, 7.5, 1])),
-  });
+        ],
+      },
+      materials: [ktx2Material],
+      mvp: ktx2Mvp,
+      // Left of the grid, scaled to the 512x768 (2:3) aspect.
+      transform: mat4.multiply(mat4.translation([-18, 0, 8]), mat4.scaling([5, 7.5, 1])),
+    });
+  }
 
   const hudCanvas = requireElement<HTMLCanvasElement>('#debug-hud');
   const hud = createHud(hudCanvas);
 
   const GRID = 10,
     SPACING = 4;
-  const positions = Array.from({ length: NUM_CUBES }, (_, i) => {
+  const positions = Array.from({ length: isSponza ? 0 : NUM_CUBES }, (_, i) => {
     const col = i % GRID,
       row = Math.floor(i / GRID);
     return vec3.fromValues((col - GRID / 2) * SPACING, (row - GRID / 2) * SPACING, 0);
@@ -580,9 +593,7 @@ async function initScene(device: GPUDevice, context: GPUCanvasContext) {
     ALIGN,
     models
   );
-  setStatus(
-    `Pharos — clearing at ${format}, and drawing a rotating cube. Drag to rotate the orbital camera; scroll to zoom.`
-  );
+  setStatus(`Pharos — Drag to rotate the orbital camera; scroll to zoom.`);
 }
 
 setStatus('Initializing WebGPU…');
