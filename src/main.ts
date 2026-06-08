@@ -13,6 +13,7 @@ import { Node } from '@/scene/node';
 import { Texture } from '@/gpu/texture';
 import { loadKtx2Texture } from '@/gpu/ktx2';
 import { loadGltf, type GltfScene } from '@/assets/gltf';
+import { assetUrl } from '@/assets/assetUrl';
 
 import cubeShaderCode from '@/materials/shaders/cube.wgsl?raw';
 import normalsShaderCode from '@/materials/shaders/normals.wgsl?raw';
@@ -281,7 +282,7 @@ async function initScene(device: GPUDevice, context: GPUCanvasContext) {
 
   const cubeTexture = await Texture.load(
     device,
-    `${import.meta.env.BASE_URL}textures/uv-grid.png`,
+    assetUrl('textures/uv-grid.png'),
     'cube texture'
   );
 
@@ -482,11 +483,11 @@ async function initScene(device: GPUDevice, context: GPUCanvasContext) {
   // then the unit Box at z=5, then the Duck (recentered, scaled) at z=12.
   const models: GltfModel[] = [
     await loadModel(
-      `${import.meta.env.BASE_URL}models/Box.glb`,
+      assetUrl('models/Box.glb'),
       mat4.multiply(mat4.translation([0, 0, 5]), mat4.scaling([5, 5, 5]))
     ),
     await loadModel(
-      `${import.meta.env.BASE_URL}models/Duck.glb`,
+      assetUrl('models/Duck.glb'),
       mat4.multiply(
         mat4.translation([0, 0, 12]),
         mat4.multiply(mat4.scaling([4.8, 4.8, 4.8]), mat4.translation([-0.134, -0.869, 0.037]))
@@ -497,7 +498,7 @@ async function initScene(device: GPUDevice, context: GPUCanvasContext) {
   // --- KTX2 (#23) ----------------------------------------------------------
   // Render the transcoded KTX2 photo on a quad. Standalone (hand-built model) —
   // glTF would reference KTX2 via the KHR_texture_basisu extension (a follow-up).
-  const ktx2Bytes = await (await fetch(`${import.meta.env.BASE_URL}textures/test.ktx2`)).arrayBuffer();
+  const ktx2Bytes = await (await fetch(assetUrl('textures/test.ktx2'))).arrayBuffer();
   const ktx2Texture = await loadKtx2Texture(device, ktx2Bytes, Texture.DEFAULT_SAMPLER);
   const quadMesh = new Mesh({
     device,
