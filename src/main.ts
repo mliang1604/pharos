@@ -10,8 +10,10 @@ import { Shader } from '@/materials/shader';
 import { Material } from '@/materials/material';
 import { mat4, vec3 } from '@/math';
 import { Texture } from '@/gpu/texture';
+import { loadGltf, type GltfScene } from '@/assets/gltf';
 
 import cubeShaderCode from '@/materials/shaders/cube.wgsl?raw';
+import normalsShaderCode from '@/materials/shaders/normals.wgsl?raw';
 
 function requireElement<T extends Element>(selector: string): T {
   const el = document.querySelector<T>(selector);
@@ -81,6 +83,14 @@ function sizeCanvasToDisplay(canvas: HTMLCanvasElement, device: GPUDevice): void
   canvas.height = height;
 }
 
+// The loaded glTF box rendered alongside the cubes: its scene graph, the
+// normals material, and a single MVP uniform reused across its renderables.
+type BoxRender = {
+  scene: GltfScene;
+  material: Material;
+  mvp: UniformBuffer;
+};
+
 function startRenderLoop(
   device: GPUDevice,
   context: GPUCanvasContext,
@@ -92,7 +102,8 @@ function startRenderLoop(
   perObject: UniformBuffer,
   positions: Float32Array<ArrayBufferLike>[],
   NUM_CUBES: number,
-  ALIGN: number
+  ALIGN: number,
+  box: BoxRender
 ): void {
   // STATE
   let rotationalAngle = 0;
@@ -183,6 +194,21 @@ function startRenderLoop(
       material.bind(pass, [i * ALIGN]);
       cubeMesh.draw(pass);
     }
+
+    // The loaded glTF box. Scaled up so it reads as a centerpiece against the
+    // cube field, and tinted by surface normal (the unlit normals material).
+    // One MVP write per renderable is safe here because the box has a single
+    // renderable; multiple would alias the buffer and need the #18 treatment.
+    const demoModel = mat4.scaling([5, 5, 5]);
+    const mvpData = new Float32Array(16); // ArrayBuffer-backed scratch for the upload
+    for (const { node, mesh } of box.scene.renderables) {
+      const model = mat4.multiply(demoModel, node.getWorldMatrix());
+      mat4.multiply(viewProjection, model, mvpData); // write the product into the scratch
+      box.mvp.write(mvpData);
+      box.material.bind(pass);
+      mesh.draw(pass);
+    }
+
     pass.end();
     device.queue.submit([encoder.finish()]);
   }
@@ -197,9 +223,7 @@ function startRenderLoop(
     lastTime = now;
     update(dt);
     render();
-    // The cube is the only draw call today. Replace this hardcoded 1 with a
-    // real per-frame draw counter once there is more than one draw site.
-    hud.frame(now, NUM_CUBES);
+    hud.frame(now, NUM_CUBES + box.scene.renderables.length);
     requestAnimationFrame(frame);
   }
 
@@ -381,6 +405,33 @@ async function initScene(device: GPUDevice, context: GPUCanvasContext) {
     bindGroupLayout: bindGroupLayout,
   });
 
+  // --- glTF box (issue #20) ------------------------------------------------
+  // Load a real .glb and render it alongside the cubes with the normals
+  // material (position + normal only — the box has no UVs, so the textured
+  // cube material can't take it; real glTF materials are #21/#22).
+  const boxScene = await loadGltf(device, `${import.meta.env.BASE_URL}models/Box.glb`);
+  const firstRenderable = boxScene.renderables[0];
+  if (firstRenderable === undefined) {
+    throw new Error('Box.glb produced no renderables');
+  }
+
+  const normalsShader = new Shader({ device, code: normalsShaderCode, label: 'normals shader' });
+  const boxMvp = new UniformBuffer(device, 64, 'box mvp'); // one mat4x4<f32>
+  const boxBindGroupLayout = device.createBindGroupLayout({
+    label: 'box bind group layout',
+    entries: [{ binding: 0, visibility: GPUShaderStage.VERTEX, buffer: { type: 'uniform' } }],
+  });
+  const boxMaterial = new Material({
+    device,
+    shader: normalsShader,
+    vertexBufferLayouts: [firstRenderable.mesh.vertexBufferLayout],
+    targets: [{ format }],
+    entries: [{ binding: 0, resource: { buffer: boxMvp.buffer } }],
+    depthStencil: { depthWriteEnabled: true, depthCompare: 'less', format: 'depth24plus' },
+    label: 'box material',
+    bindGroupLayout: boxBindGroupLayout,
+  });
+
   const hudCanvas = requireElement<HTMLCanvasElement>('#debug-hud');
   const hud = createHud(hudCanvas);
 
@@ -403,7 +454,8 @@ async function initScene(device: GPUDevice, context: GPUCanvasContext) {
     perObject,
     positions,
     NUM_CUBES,
-    ALIGN
+    ALIGN,
+    { scene: boxScene, material: boxMaterial, mvp: boxMvp }
   );
   setStatus(
     `Pharos — clearing at ${format}, and drawing a rotating cube. Drag to rotate the orbital camera; scroll to zoom.`

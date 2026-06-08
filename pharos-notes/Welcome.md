@@ -15,6 +15,7 @@ Grouped by milestone phase — each phase page links to its per-issue notes.
 
 - [[Phase 0 — Foundations]] — WebGPU bring-up, the render pipeline, the textured spinning cube, and the delta-time game loop.
 - [[Phase 1 — Rendering Core]] — a reusable rendering API: the `Mesh` class and vertex/index buffer abstraction, with the engine's first subsystem folders.
+- [[Phase 2 — Asset Pipeline]] — loading real assets: a minimal glTF `.glb` loader behind an importer boundary, turning authoring-friendly data into the engine's `Mesh` + node graph.
 
 _(More phase pages will land here as later phases pick up notes.)_
 
