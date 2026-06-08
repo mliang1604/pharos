@@ -9,14 +9,17 @@ import type {
   GltfJson,
   GltfNode,
   GltfPrimitive,
+  GltfSampler,
 } from '@/assets/gltfTypes';
 import type { VertexFormat } from '@/geometry/vertexFormats';
 import { mat4, quat, vec3 } from '@/math';
+import { Texture } from '@/gpu/texture';
 
 export interface PbrMaterial {
   baseColor: [number, number, number, number];
   metallic: number;
   roughness: number;
+  baseColorTexture?: Texture;
 }
 
 export interface Renderable {
@@ -75,7 +78,8 @@ export async function loadGltf(device: GPUDevice, url: string): Promise<GltfScen
   }
   const data = await response.arrayBuffer();
   const { json, bin } = parseGlb(data);
-  return buildScene(device, json, bin);
+  const textures = await loadTextures(device, json, bin);
+  return buildScene(device, json, bin, textures);
 }
 
 export function parseGlb(data: ArrayBuffer): { json: GltfJson; bin: ArrayBuffer } {
@@ -247,7 +251,12 @@ export function buildMesh(
   return new Mesh({ device, vertices, formats, ...(indices && { indices }) });
 }
 
-export function buildScene(device: GPUDevice, json: GltfJson, bin: ArrayBuffer): GltfScene {
+export function buildScene(
+  device: GPUDevice,
+  json: GltfJson,
+  bin: ArrayBuffer,
+  textures: Texture[]
+): GltfScene {
   const nodes = json.nodes.map(buildNode);
 
   // Map child nodes
@@ -288,7 +297,7 @@ export function buildScene(device: GPUDevice, json: GltfJson, bin: ArrayBuffer):
       renderables.push({
         node,
         mesh: buildMesh(device, json, bin, primitive),
-        material: buildMaterial(json, primitive),
+        material: buildMaterial(json, primitive, textures),
       });
     }
   });
@@ -296,17 +305,101 @@ export function buildScene(device: GPUDevice, json: GltfJson, bin: ArrayBuffer):
   return { roots, renderables };
 }
 
-export function buildMaterial(json: GltfJson, primitive: GltfPrimitive): PbrMaterial {
+export function buildMaterial(
+  json: GltfJson,
+  primitive: GltfPrimitive,
+  textures: Texture[]
+): PbrMaterial {
   // get gltfMaterial
   let gltfMaterial = undefined;
   if (primitive.material !== undefined) {
     gltfMaterial = json.materials?.[primitive.material];
   }
+
+  // get textures
+  const textureIndex = gltfMaterial?.pbrMetallicRoughness?.baseColorTexture?.index;
+  const baseColorTexture = textureIndex !== undefined ? textures[textureIndex] : undefined;
+
   // get properties
   const pbr = gltfMaterial?.pbrMetallicRoughness;
   const baseColor = (pbr?.baseColorFactor ?? [1, 1, 1, 1]) as [number, number, number, number];
   const metallic = pbr?.metallicFactor ?? 1;
   const roughness = pbr?.roughnessFactor ?? 1;
 
-  return { baseColor, metallic, roughness };
+  return {
+    baseColor,
+    metallic,
+    roughness,
+    ...(baseColorTexture !== undefined && { baseColorTexture }),
+  };
+}
+
+// minFilter splits into minFilter + mipmapFilter
+interface SamplerFilter {
+  minFilter: GPUFilterMode;
+  mipmapFilter: GPUMipmapFilterMode;
+}
+
+const GL_MIN_FILTER: Record<number, SamplerFilter> = {
+  9728: { minFilter: 'nearest', mipmapFilter: 'nearest' }, // NEAREST
+  9729: { minFilter: 'linear', mipmapFilter: 'nearest' }, // LINEAR
+  9984: { minFilter: 'nearest', mipmapFilter: 'nearest' }, // NEAREST_MIPMAP_NEAREST
+  9985: { minFilter: 'linear', mipmapFilter: 'nearest' }, // LINEAR_MIPMAP_NEAREST
+  9986: { minFilter: 'nearest', mipmapFilter: 'linear' }, // NEAREST_MIPMAP_LINEAR
+  9987: { minFilter: 'linear', mipmapFilter: 'linear' }, // LINEAR_MIPMAP_LINEAR
+};
+
+const GL_MAG_FILTER: Record<number, GPUFilterMode> = {
+  9728: 'nearest',
+  9729: 'linear',
+};
+
+const GL_WRAP: Record<number, GPUAddressMode> = {
+  10497: 'repeat',
+  33071: 'clamp-to-edge',
+  33648: 'mirror-repeat',
+};
+
+export function gltfSamplerToDescriptor(sampler?: GltfSampler): GPUSamplerDescriptor {
+  if (sampler === undefined) {
+    return Texture.DEFAULT_SAMPLER;
+  }
+  const min = GL_MIN_FILTER[sampler.minFilter ?? 9987] ?? {
+    minFilter: 'linear',
+    mipmapFilter: 'linear',
+  };
+  return {
+    magFilter: GL_MAG_FILTER[sampler.magFilter ?? 9729] ?? 'linear',
+    minFilter: min.minFilter,
+    mipmapFilter: min.mipmapFilter,
+    addressModeU: GL_WRAP[sampler.wrapS ?? 10497] ?? 'repeat',
+    addressModeV: GL_WRAP[sampler.wrapT ?? 10497] ?? 'repeat',
+  };
+}
+
+export async function loadTextures(
+  device: GPUDevice,
+  json: GltfJson,
+  bin: ArrayBuffer
+): Promise<Texture[]> {
+  return Promise.all(
+    (json.textures ?? []).map(async (texture) => {
+      const image = texture.source !== undefined ? json.images?.[texture.source] : undefined;
+      const sampler = texture.sampler !== undefined ? json.samplers?.[texture.sampler] : undefined;
+
+      if (image === undefined || image.bufferView === undefined) {
+        throw new Error('texture image has no bufferView (external/URI images unsupported)');
+      }
+      const view = json.bufferViews[image.bufferView];
+      if (view === undefined) {
+        throw new Error('image bufferView out of range');
+      }
+      const start = view.byteOffset ?? 0;
+      const bytes = bin.slice(start, start + view.byteLength);
+
+      const blob = new Blob([bytes], image.mimeType !== undefined ? { type: image.mimeType } : {});
+      const bitmap = await createImageBitmap(blob, { colorSpaceConversion: 'none' });
+      return Texture.fromImageBitmap(device, bitmap, gltfSamplerToDescriptor(sampler), false);
+    })
+  );
 }
