@@ -372,7 +372,7 @@ the plan still accounts for them.
 - ✅ **[#110](https://github.com/mliang1604/pharos/issues/110)** GitHub Pages: texture 404 from missing base-path prefix `[bug]` ⚠ no milestone
   Runtime texture load 404'd under the Pages subpath. Point fix; generalized by #112. _Consider assigning to Phase 1 on GitHub for the record._
 
-- ⏳ **[#119](https://github.com/mliang1604/pharos/issues/119)** Showcase a second glTF model and add a Duck loader regression test `[assets]` ⚠ no milestone
-  Follow-up to #20: render cubes → Box → Duck front-to-back in the demo, and add `Duck.glb` as a permanent second fixture proving the loader isn't Box-specific. _In review (`feature/119_GltfDemoAndRegression`)._
+- ✅ **[#119](https://github.com/mliang1604/pharos/issues/119)** Showcase a second glTF model and add a Duck loader regression test `[assets]` ⚠ no milestone
+  Follow-up to #20: render cubes → Box → Duck front-to-back in the demo, and add `Duck.glb` as a permanent second fixture proving the loader isn't Box-specific. _Merged via #120._
 
 ---
