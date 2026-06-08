@@ -112,7 +112,7 @@ state.
 
 ---
 
-## Phase 2 — Asset Pipeline · ⏳ in progress (3/10 merged)
+## Phase 2 — Asset Pipeline · ⏳ in progress (3/10 merged · #23 in review)
 
 **Milestone goal:** Load real-world assets — glTF scenes with KTX2 textures — through a managed loader.
 
@@ -133,8 +133,9 @@ state.
   Wire glTF textures to the loader from Phase 1. Respect wrap/filter modes.
   _Merged via #122: decode embedded (bufferView) images, map GL sampler enums → `GPUSamplerDescriptor`, load into an indexed `Texture[]`, attach `baseColorTexture` per material; demo renders the textured Duck. URI images deferred; other texture slots → #41._
 
-- 🔲 **[#23](https://github.com/mliang1604/pharos/issues/23)** KTX2 / Basis Universal loader `[assets]`
+- ⏳ **[#23](https://github.com/mliang1604/pharos/issues/23)** KTX2 / Basis Universal loader `[assets]`
   Integrate the KTX2 loader (transcoder WASM). Pick GPU-supported format from the adapter's feature list.
+  _In review (`feature/23_Ktx2Loader`): device-feature negotiation, format selection (BC/ASTC/ETC2/RGBA32), Basis transcode via vendored Khronos WASM, compressed upload. Standalone loader + demo quad; glTF-native KTX2 deferred to #127._
 
 - 🔲 **[#24](https://github.com/mliang1604/pharos/issues/24)** `AssetManager`: async loading, caching, ref counting `[assets] [architecture]`
   Single load per URL, dispose when ref count drops to zero. Promise-based API.
@@ -382,5 +383,8 @@ the plan still accounts for them.
 
 - ✅ **[#125](https://github.com/mliang1604/pharos/issues/125)** Models clip away when zooming out (far plane too near, zoom unbounded) `[rendering]` ⚠ no milestone
   Raise the camera far plane (100 → 1000) and clamp `OrbitControls` `maxRadius` (200) so zoom can't recede the scene past the clip. _Merged via #126._
+
+- 🔲 **[#127](https://github.com/mliang1604/pharos/issues/127)** glTF KTX2 textures via the KHR_texture_basisu extension `[assets]` ⚠ no milestone
+  Follow-up to #23: resolve `texture.extensions.KHR_texture_basisu.source` and route `image/ktx2` through `loadKtx2Texture`, with a KTX2-textured glTF test asset.
 
 ---
