@@ -14,7 +14,7 @@ This file is the repo's shared workflow contract; keep it current.
 
 - `npm run dev` — Vite dev server. `npm run build` — production build.
 - `npm run test` — Vitest (`--project unit`, Node env, GPU mocked).
-- `npx tsc --noEmit` — typecheck. `npx eslint src test` — lint.
+- `npx tsc --noEmit` — typecheck. `npx eslint .` — lint (whole repo, matching CI; don't scope it or you'll miss what CI catches).
 - **Strict TS gotchas that recur:** `noUncheckedIndexedAccess` (indexed access is `T | undefined` — guard or `?? default`) and `exactOptionalPropertyTypes` ("omitted" ≠ "present-but-undefined" — conditional-spread optionals).
 
 ## Conventions
