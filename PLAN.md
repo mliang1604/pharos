@@ -112,7 +112,7 @@ state.
 
 ---
 
-## Phase 2 — Asset Pipeline · ⏳ in progress (1/10 merged)
+## Phase 2 — Asset Pipeline · ⏳ in progress (1/10 merged · #21 in review)
 
 **Milestone goal:** Load real-world assets — glTF scenes with KTX2 textures — through a managed loader.
 
@@ -125,8 +125,9 @@ state.
 - 🔲 **[#117](https://github.com/mliang1604/pharos/issues/117)** glTF loader: support `.gltf` (non-binary) input and non-tight/non-float attributes `[assets]` ➕ added
   Follow-up to #20: the `.gltf` JSON container (embedded/external buffers), interleaved bufferViews (`byteStride`), and non-float vertex attributes — all currently throw "unsupported."
 
-- 🔲 **[#21](https://github.com/mliang1604/pharos/issues/21)** glTF: PBR material parameters (metallic-roughness, baseColor) `[assets] [rendering]`
+- ⏳ **[#21](https://github.com/mliang1604/pharos/issues/21)** glTF: PBR material parameters (metallic-roughness, baseColor) `[assets] [rendering]`
   Map glTF material data to engine material. Defer the shader work to Phase 4.
+  _In review (`feature/21_GltfMaterialParams`): normalize glTF material → engine `PbrMaterial` (baseColor/metallic/roughness) with spec defaults, attached per renderable. Textures deferred to #22; shading to #35._
 
 - 🔲 **[#22](https://github.com/mliang1604/pharos/issues/22)** glTF: texture and sampler import `[assets]`
   Wire glTF textures to the loader from Phase 1. Respect wrap/filter modes.
