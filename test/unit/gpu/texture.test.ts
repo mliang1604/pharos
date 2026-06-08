@@ -117,3 +117,34 @@ describe('Texture.load', () => {
     await expect(Texture.load(device, '/missing.png')).rejects.toThrow('404');
   });
 });
+
+describe('Texture.fromCompressed', () => {
+  it('creates a compressed texture and uploads each level with block row pitch', () => {
+    const createTexture = vi.fn(() => ({}));
+    const writeTexture = vi.fn();
+    const createSampler = vi.fn(() => ({}));
+    const device = {
+      createTexture,
+      createSampler,
+      queue: { writeTexture },
+    } as unknown as GPUDevice;
+
+    Texture.fromCompressed(
+      device,
+      { format: 'bc7-rgba-unorm-srgb', levels: [{ data: new Uint8Array(16), width: 4, height: 4 }] },
+      Texture.DEFAULT_SAMPLER
+    );
+
+    expect(createTexture).toHaveBeenCalledWith(
+      expect.objectContaining({ format: 'bc7-rgba-unorm-srgb', mipLevelCount: 1 })
+    );
+    // 4px wide / 4 texels-per-block = 1 block × 16 bytes = bytesPerRow 16.
+    expect(writeTexture).toHaveBeenCalledOnce();
+    expect(writeTexture).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({ bytesPerRow: 16 }),
+      expect.anything()
+    );
+  });
+});

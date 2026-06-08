@@ -8,8 +8,10 @@ import { Mesh } from '@/geometry/mesh';
 import { UniformBuffer } from '@/gpu/uniformBuffer';
 import { Shader } from '@/materials/shader';
 import { Material } from '@/materials/material';
-import { mat4, vec3, type Mat4 } from '@/math';
+import { mat4, vec3, quat, type Mat4 } from '@/math';
+import { Node } from '@/scene/node';
 import { Texture } from '@/gpu/texture';
+import { loadKtx2Texture } from '@/gpu/ktx2';
 import { loadGltf, type GltfScene } from '@/assets/gltf';
 
 import cubeShaderCode from '@/materials/shaders/cube.wgsl?raw';
@@ -52,9 +54,13 @@ async function initWebGpu(): Promise<GPUDevice | null> {
     return null;
   }
 
+  const compressionFeatures = (
+    ['texture-compression-bc', 'texture-compression-etc2', 'texture-compression-astc'] as const
+  ).filter((f) => adapter.features.has(f));
+
   let device: GPUDevice;
   try {
-    device = await adapter.requestDevice();
+    device = await adapter.requestDevice({ requiredFeatures: compressionFeatures });
   } catch (err) {
     const reason = err instanceof Error ? err.message : String(err);
     setStatus(`Failed to acquire a GPU device: ${reason}`, 'error');
@@ -70,6 +76,7 @@ async function initWebGpu(): Promise<GPUDevice | null> {
     console.info('info:', adapter.info);
     console.info('features:', [...adapter.features]);
     console.info('limits:', adapter.limits);
+    console.info('compressionFeatures:', compressionFeatures);
     console.groupEnd();
   }
 
@@ -421,7 +428,7 @@ async function initScene(device: GPUDevice, context: GPUCanvasContext) {
   const texturedShader = new Shader({
     device,
     code: texturedShaderCode,
-    label: 'textured shaded ',
+    label: 'textured shader',
   });
 
   async function loadModel(url: string, transform: Mat4): Promise<GltfModel> {
@@ -486,6 +493,61 @@ async function initScene(device: GPUDevice, context: GPUCanvasContext) {
       )
     ),
   ];
+
+  // --- KTX2 (#23) ----------------------------------------------------------
+  // Render the transcoded KTX2 photo on a quad. Standalone (hand-built model) —
+  // glTF would reference KTX2 via the KHR_texture_basisu extension (a follow-up).
+  const ktx2Bytes = await (await fetch(`${import.meta.env.BASE_URL}textures/test.ktx2`)).arrayBuffer();
+  const ktx2Texture = await loadKtx2Texture(device, ktx2Bytes, Texture.DEFAULT_SAMPLER);
+  const quadMesh = new Mesh({
+    device,
+    // Unit quad in XY facing +Z; interleaved pos/normal/uv to match textured.wgsl.
+    vertices: new Float32Array([
+      -1, -1, 0, 0, 0, 1, 0, 1, 1, -1, 0, 0, 0, 1, 1, 1, 1, 1, 0, 0, 0, 1, 1, 0, -1, 1, 0, 0, 0, 1, 0,
+      0,
+    ]),
+    formats: ['float32x3', 'float32x3', 'float32x2'],
+    indices: new Uint16Array([0, 1, 2, 0, 2, 3]),
+  });
+  const ktx2Mvp = new UniformBuffer(device, 64, 'ktx2 mvp');
+  const ktx2Material = new Material({
+    device,
+    shader: texturedShader,
+    vertexBufferLayouts: [quadMesh.vertexBufferLayout],
+    targets: [{ format }],
+    entries: [
+      { binding: 0, resource: { buffer: ktx2Mvp.buffer } },
+      { binding: 1, resource: ktx2Texture.texture.createView() },
+      { binding: 2, resource: ktx2Texture.sampler },
+    ],
+    depthStencil: { depthWriteEnabled: true, depthCompare: 'less', format: 'depth24plus' },
+    label: 'ktx2 material',
+    bindGroupLayout: device.createBindGroupLayout({
+      label: 'ktx2 bind group layout',
+      entries: [
+        { binding: 0, visibility: GPUShaderStage.VERTEX, buffer: { type: 'uniform' } },
+        { binding: 1, visibility: GPUShaderStage.FRAGMENT, texture: {} },
+        { binding: 2, visibility: GPUShaderStage.FRAGMENT, sampler: {} },
+      ],
+    }),
+  });
+  const ktx2Node = new Node(vec3.fromValues(0, 0, 0), quat.identity(), vec3.fromValues(1, 1, 1));
+  models.push({
+    scene: {
+      roots: [ktx2Node],
+      renderables: [
+        {
+          node: ktx2Node,
+          mesh: quadMesh,
+          material: { baseColor: [1, 1, 1, 1], metallic: 0, roughness: 1, baseColorTexture: ktx2Texture },
+        },
+      ],
+    },
+    material: ktx2Material,
+    mvp: ktx2Mvp,
+    // Left of the grid, scaled to the 512x768 (2:3) aspect.
+    transform: mat4.multiply(mat4.translation([-18, 0, 8]), mat4.scaling([5, 7.5, 1])),
+  });
 
   const hudCanvas = requireElement<HTMLCanvasElement>('#debug-hud');
   const hud = createHud(hudCanvas);
