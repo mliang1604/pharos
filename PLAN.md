@@ -112,7 +112,7 @@ state.
 
 ---
 
-## Phase 2 — Asset Pipeline · ⏳ in progress (4/10 merged)
+## Phase 2 — Asset Pipeline · ⏳ in progress (5/10 merged)
 
 **Milestone goal:** Load real-world assets — glTF scenes with KTX2 textures — through a managed loader.
 
@@ -137,8 +137,9 @@ state.
   Integrate the KTX2 loader (transcoder WASM). Pick GPU-supported format from the adapter's feature list.
   _Merged via #128: device-feature negotiation, format selection (BC/ASTC/ETC2/RGBA32), Basis transcode via vendored Khronos WASM, compressed upload. Standalone loader + demo quad; glTF-native KTX2 deferred to #127._
 
-- 🔲 **[#24](https://github.com/mliang1604/pharos/issues/24)** `AssetManager`: async loading, caching, ref counting `[assets] [architecture]`
+- ✅ **[#24](https://github.com/mliang1604/pharos/issues/24)** `AssetManager`: async loading, caching, ref counting `[assets] [architecture]`
   Single load per URL, dispose when ref count drops to zero. Promise-based API.
+  _Merged via #129: generic `AssetManager<T extends Disposable>` with injected loader, in-flight-promise single-flight dedup, ref-counted deterministic dispose-at-zero, and identity-guarded eviction of failed loads. No call sites yet; wired in with #26/#27 test assets._
 
 - 🔲 **[#25](https://github.com/mliang1604/pharos/issues/25)** Loading state UX in the demo app `[ui]`
   Simple progress bar while a scene loads. Useful for spotting blocking work.
