@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import {
   parseGlb,
+  parseGltf,
   decodeAccessor,
   buildVertexData,
   buildNode,
@@ -10,8 +11,9 @@ import {
   buildScene,
   loadGltf,
   gltfSamplerToDescriptor,
+  toFloat32,
 } from '@/assets/gltf';
-import type { GltfPrimitive } from '@/assets/gltfTypes';
+import type { GltfAccessor, GltfComponentType, GltfJson, GltfPrimitive } from '@/assets/gltfTypes';
 import type { Texture } from '@/gpu/texture';
 
 // --- Fixture plumbing -------------------------------------------------------
@@ -102,7 +104,7 @@ describe('gltf', () => {
     describe('on Box.glb', () => {
       it('decodes POSITION (accessor 2) into 24 vec3 floats, all ±0.5', () => {
         const { json, bin } = parseGlb(boxGlb);
-        const positions = decodeAccessor(json, bin, 2);
+        const positions = decodeAccessor(json, [bin], 2);
         expect(positions).instanceOf(Float32Array);
         expect(positions.length).toBe(72);
         expect([...positions].every((x) => Math.abs(x) === 0.5)).toBe(true);
@@ -110,10 +112,50 @@ describe('gltf', () => {
 
       it('decodes INDICES (accessor 0) into 36 integers, all < 24', () => {
         const { json, bin } = parseGlb(boxGlb);
-        const indices = decodeAccessor(json, bin, 0);
+        const indices = decodeAccessor(json, [bin], 0);
         expect(indices).instanceOf(Uint16Array);
         expect(indices.length).toBe(36);
         expect([...indices].every((x) => x < 24)).toBe(true);
+      });
+    });
+
+    // Interleaved bufferViews (#117): POSITION (vec3) + TEXCOORD_0 (vec2) woven
+    // into one view. Per-vertex group = 5 floats = 20-byte stride; POSITION at
+    // offset 0, TEXCOORD at offset 12. decodeAccessor must de-interleave each
+    // attribute into its own packed array.
+    describe('on an interleaved bufferView', () => {
+      const interleaved = new Float32Array([
+        1, 2, 3, 10, 20, // vertex 0: POSITION, TEXCOORD_0
+        4, 5, 6, 30, 40, // vertex 1: POSITION, TEXCOORD_0
+      ]).buffer;
+
+      const json = {
+        accessors: [
+          { bufferView: 0, byteOffset: 0, componentType: 5126, count: 2, type: 'VEC3' },
+          { bufferView: 0, byteOffset: 12, componentType: 5126, count: 2, type: 'VEC2' },
+        ],
+        bufferViews: [{ buffer: 0, byteOffset: 0, byteLength: 40, byteStride: 20 }],
+      } as unknown as GltfJson;
+
+      it('de-interleaves POSITION, skipping the woven-in TEXCOORD bytes', () => {
+        expect([...decodeAccessor(json, [interleaved], 0)]).toEqual([1, 2, 3, 4, 5, 6]);
+      });
+
+      it('de-interleaves TEXCOORD_0 at its offset within the stride', () => {
+        expect([...decodeAccessor(json, [interleaved], 1)]).toEqual([10, 20, 30, 40]);
+      });
+
+      it('copies interleaved data out, but keeps tightly-packed data zero-copy', () => {
+        // Interleaved → a packed copy on a fresh buffer.
+        expect(decodeAccessor(json, [interleaved], 0).buffer).not.toBe(interleaved);
+
+        // Tightly packed (no byteStride) → a view sharing the input buffer.
+        const tight = new Float32Array([1, 2, 3, 4, 5, 6]).buffer;
+        const tightJson = {
+          accessors: [{ bufferView: 0, componentType: 5126, count: 2, type: 'VEC3' }],
+          bufferViews: [{ buffer: 0, byteOffset: 0, byteLength: 24 }],
+        } as unknown as GltfJson;
+        expect(decodeAccessor(tightJson, [tight], 0).buffer).toBe(tight);
       });
     });
   });
@@ -129,9 +171,9 @@ describe('gltf', () => {
         }
 
         // Act
-        const { vertices, formats } = buildVertexData(json, bin, primitive);
-        const positions = decodeAccessor(json, bin, 2); // POSITION
-        const normals = decodeAccessor(json, bin, 1); // NORMAL
+        const { vertices, formats } = buildVertexData(json, [bin], primitive);
+        const positions = decodeAccessor(json, [bin], 2); // POSITION
+        const normals = decodeAccessor(json, [bin], 1); // NORMAL
 
         // Assert
         expect(vertices.length).toBe(144);
@@ -145,6 +187,45 @@ describe('gltf', () => {
           ]);
         }
       });
+    });
+  });
+
+  // Non-float vertex attributes (#117): integer accessors converted to float —
+  // a plain cast when not normalized, a range rescale when normalized. No real
+  // asset here is non-float, so toFloat32 is exercised directly.
+  describe('toFloat32', () => {
+    const acc = (componentType: GltfComponentType, normalized = false): GltfAccessor => ({
+      componentType,
+      count: 0,
+      type: 'SCALAR',
+      normalized,
+    });
+
+    it('passes a Float32Array through unchanged (zero-copy)', () => {
+      const floats = new Float32Array([1.5, -2.5]);
+      expect(toFloat32(floats, acc(5126))).toBe(floats);
+    });
+
+    it('casts a non-normalized integer array to float', () => {
+      const result = toFloat32(new Uint16Array([1, 2, 300]), acc(5123, false));
+      expect([...result]).toEqual([1, 2, 300]);
+    });
+
+    it('rescales normalized unsigned bytes onto [0, 1]', () => {
+      const result = toFloat32(new Uint8Array([0, 255, 51]), acc(5121, true));
+      expect(result[0]).toBe(0);
+      expect(result[1]).toBe(1);
+      expect(result[2]).toBeCloseTo(0.2, 5); // 51 / 255
+    });
+
+    it('rescales normalized signed bytes onto [-1, 1], clamping the min', () => {
+      // -128/127 = -1.0079… → clamped to -1; -127/127 = -1 exactly.
+      const result = toFloat32(new Int8Array([-128, -127, 0, 127]), acc(5120, true));
+      expect([...result]).toEqual([-1, -1, 0, 1]);
+    });
+
+    it('throws on a normalized type it cannot rescale (u32)', () => {
+      expect(() => toFloat32(new Uint32Array([1]), acc(5125, true))).toThrow('unsupported');
     });
   });
 
@@ -179,7 +260,7 @@ describe('gltf', () => {
     describe('on Box.glb', () => {
       it('yields one root and one renderable, with the mesh node parented to the root', () => {
         const { json, bin } = parseGlb(boxGlb);
-        const scene = buildScene(createMockDevice(), json, bin, []);
+        const scene = buildScene(createMockDevice(), json, [bin], []);
 
         expect(scene.roots).toHaveLength(1);
         expect(scene.renderables).toHaveLength(1);
@@ -300,13 +381,95 @@ describe('gltf', () => {
     });
   });
 
+  // The .gltf (non-binary) path (#117): a JSON manifest whose buffers/images
+  // live outside the file — inline as base64 data: URIs, or as sibling files
+  // resolved relative to the .gltf. A POSITION-only triangle is enough to drive
+  // detection → buffer resolution → decode without a GPU or createImageBitmap.
+  describe('.gltf (non-binary input)', () => {
+    const POSITIONS = new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0]);
+    const POSITION_BYTES = new Uint8Array(POSITIONS.buffer);
+
+    function strToArrayBuffer(s: string): ArrayBuffer {
+      const encoded = new TextEncoder().encode(s);
+      const out = new ArrayBuffer(encoded.byteLength);
+      new Uint8Array(out).set(encoded);
+      return out;
+    }
+
+    function toBase64(bytes: Uint8Array): string {
+      let binary = '';
+      for (const b of bytes) {
+        binary += String.fromCharCode(b);
+      }
+      return btoa(binary);
+    }
+
+    function makeGltf(bufferUri: string): ArrayBuffer {
+      return strToArrayBuffer(
+        JSON.stringify({
+          asset: { version: '2.0' },
+          scene: 0,
+          scenes: [{ nodes: [0] }],
+          nodes: [{ mesh: 0 }],
+          meshes: [{ primitives: [{ attributes: { POSITION: 0 } }] }],
+          accessors: [{ bufferView: 0, componentType: 5126, count: 3, type: 'VEC3' }],
+          bufferViews: [{ buffer: 0, byteOffset: 0, byteLength: POSITION_BYTES.byteLength }],
+          buffers: [{ uri: bufferUri, byteLength: POSITION_BYTES.byteLength }],
+        })
+      );
+    }
+
+    function mockFetch(byUrl: (url: string) => ArrayBuffer): string[] {
+      const seen: string[] = [];
+      globalThis.fetch = vi.fn((input: unknown) => {
+        const url = String(input);
+        seen.push(url);
+        return Promise.resolve({ ok: true, status: 200, arrayBuffer: () => Promise.resolve(byUrl(url)) });
+      }) as unknown as typeof fetch;
+      return seen;
+    }
+
+    describe('parseGltf', () => {
+      it('parses a JSON manifest and reaches the mesh', () => {
+        const json = parseGltf(makeGltf('unused'));
+        expect(json.meshes).toHaveLength(1);
+        expect(json.meshes[0]?.primitives[0]?.attributes.POSITION).toBe(0);
+      });
+
+      it('rejects a non-2.0 asset version', () => {
+        const bad = strToArrayBuffer(JSON.stringify({ asset: { version: '1.0' } }));
+        expect(() => parseGltf(bad)).toThrow('Data is not glTF version 2.0');
+      });
+    });
+
+    it('loads a .gltf whose buffer is an inline base64 data: URI', async () => {
+      const gltf = makeGltf(`data:application/octet-stream;base64,${toBase64(POSITION_BYTES)}`);
+      mockFetch(() => gltf);
+
+      const scene = await loadGltf(createMockDevice(), '/model.gltf');
+
+      expect(scene.renderables).toHaveLength(1);
+    });
+
+    it('loads a .gltf whose buffer is a sibling file resolved against its directory', async () => {
+      const gltf = makeGltf('mesh.bin');
+      const seen = mockFetch((url) => (url.endsWith('.bin') ? POSITIONS.buffer : gltf));
+
+      const scene = await loadGltf(createMockDevice(), '/models/model.gltf');
+
+      expect(scene.renderables).toHaveLength(1);
+      // 'mesh.bin' resolved next to the .gltf, not at the site root.
+      expect(seen.some((u) => u.endsWith('/models/mesh.bin'))).toBe(true);
+    });
+  });
+
   // A second, structurally different fixture — multiple/nested nodes, matrix
   // transforms, a 3-attribute mesh, ~2.4k verts / 12.6k indices — to prove the
   // loader isn't special-cased to Box.glb. (#119)
   describe('Duck.glb (second-fixture regression)', () => {
     it('assembles one nested renderable from a multi-node scene', () => {
       const { json, bin } = parseGlb(duckGlb);
-      const scene = buildScene(createMockDevice(), json, bin, []);
+      const scene = buildScene(createMockDevice(), json, [bin], []);
 
       expect(scene.roots).toHaveLength(1);
       expect(scene.renderables).toHaveLength(1);
@@ -320,7 +483,7 @@ describe('gltf', () => {
       if (primitive === undefined) {
         throw new Error('fixture has no primitive');
       }
-      const { vertices, formats } = buildVertexData(json, bin, primitive);
+      const { vertices, formats } = buildVertexData(json, [bin], primitive);
 
       expect(formats).toEqual(['float32x3', 'float32x3', 'float32x2']);
       expect(vertices.length).toBe(2399 * 8); // 2399 verts × stride 8
@@ -332,7 +495,7 @@ describe('gltf', () => {
       if (primitive === undefined || primitive.indices === undefined) {
         throw new Error('fixture has no indices');
       }
-      const indices = decodeAccessor(json, bin, primitive.indices);
+      const indices = decodeAccessor(json, [bin], primitive.indices);
 
       expect(indices).toBeInstanceOf(Uint16Array);
       expect(indices.length).toBe(12636);
@@ -349,7 +512,7 @@ describe('gltf', () => {
       if (primitive === undefined) {
         throw new Error('fixture has no primitive');
       }
-      const { vertices, formats } = buildVertexData(json, bin, primitive);
+      const { vertices, formats } = buildVertexData(json, [bin], primitive);
 
       expect(formats).toEqual(['float32x3', 'float32x3', 'float32x2']);
       expect(vertices.length).toBe(14556 * 8);
