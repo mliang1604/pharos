@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 import { Texture, type CompressedLevel } from '@/gpu/texture';
+import { assetUrl } from '@/assets/assetUrl';
 
 type Ktx2Target = {
   gpuFormat: GPUTextureFormat;
@@ -83,13 +84,13 @@ function loadScript(src: string): Promise<void> {
 function loadBasisModule(): Promise<BasisModule> {
   if (basisModulePromise === undefined) {
     basisModulePromise = (async () => {
-      await loadScript(`${import.meta.env.BASE_URL}basis/basis_transcoder.js`);
+      await loadScript(assetUrl('basis/basis_transcoder.js'));
       const factory = window.BASIS;
       if (factory === undefined) {
         throw new Error('basis_transcoder.js did not define the BASIS factory');
       }
       const module = await factory({
-        locateFile: (path) => `${import.meta.env.BASE_URL}basis/${path}`,
+        locateFile: (path) => assetUrl(`basis/${path}`),
       });
       module.initializeBasis();
       return module;

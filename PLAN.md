@@ -150,7 +150,7 @@ state.
 - 🔲 **[#27](https://github.com/mliang1604/pharos/issues/27)** Test asset: load the Sponza scene `[assets]`
   Larger scene to validate draw-call performance and asset memory.
 
-- 🔲 **[#112](https://github.com/mliang1604/pharos/issues/112)** Centralize base-path-correct asset URLs (assetUrl helper) `[architecture] [assets]` ➕ added
+- ⏳ **[#112](https://github.com/mliang1604/pharos/issues/112)** Centralize base-path-correct asset URLs (assetUrl helper) `[architecture] [assets]` ➕ added
   A helper that resolves asset URLs against the deploy base path. Generalizes the fix from #110 so runtime asset loads work under GitHub Pages' subpath.
 
 ---
