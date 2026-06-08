@@ -112,7 +112,7 @@ state.
 
 ---
 
-## Phase 2 — Asset Pipeline · ⏳ in progress (0/9 merged · #20 in review)
+## Phase 2 — Asset Pipeline · ⏳ in progress (0/10 merged · #20 in review)
 
 **Milestone goal:** Load real-world assets — glTF scenes with KTX2 textures — through a managed loader.
 
@@ -120,7 +120,10 @@ state.
 
 - ⏳ **[#20](https://github.com/mliang1604/pharos/issues/20)** glTF 2.0 loader: geometry and node hierarchy `[assets]`
   Parse `.gltf` and `.glb`, build `Mesh` + node graph. Use `@gltf-transform/core` or roll a minimal parser.
-  _In review (`feature/20_GltfLoader`): rolled a minimal `.glb` loader behind a `GltfScene` importer boundary. Deferred to follow-ups — `.gltf` (non-binary) input, interleaved/non-float source attributes._
+  _In review (`feature/20_GltfLoader`): rolled a minimal `.glb` loader behind a `GltfScene` importer boundary. Deferred to #117 — `.gltf` (non-binary) input, interleaved/non-float source attributes._
+
+- 🔲 **[#117](https://github.com/mliang1604/pharos/issues/117)** glTF loader: support `.gltf` (non-binary) input and non-tight/non-float attributes `[assets]` ➕ added
+  Follow-up to #20: the `.gltf` JSON container (embedded/external buffers), interleaved bufferViews (`byteStride`), and non-float vertex attributes — all currently throw "unsupported."
 
 - 🔲 **[#21](https://github.com/mliang1604/pharos/issues/21)** glTF: PBR material parameters (metallic-roughness, baseColor) `[assets] [rendering]`
   Map glTF material data to engine material. Defer the shader work to Phase 4.
