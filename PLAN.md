@@ -112,7 +112,7 @@ state.
 
 ---
 
-## Phase 2 — Asset Pipeline · ⏳ in progress (5/10 merged)
+## Phase 2 — Asset Pipeline · ⏳ in progress (6/10 merged)
 
 **Milestone goal:** Load real-world assets — glTF scenes with KTX2 textures — through a managed loader.
 
@@ -150,8 +150,9 @@ state.
 - 🔲 **[#27](https://github.com/mliang1604/pharos/issues/27)** Test asset: load the Sponza scene `[assets]`
   Larger scene to validate draw-call performance and asset memory.
 
-- ⏳ **[#112](https://github.com/mliang1604/pharos/issues/112)** Centralize base-path-correct asset URLs (assetUrl helper) `[architecture] [assets]` ➕ added
+- ✅ **[#112](https://github.com/mliang1604/pharos/issues/112)** Centralize base-path-correct asset URLs (assetUrl helper) `[architecture] [assets]` ➕ added
   A helper that resolves asset URLs against the deploy base path. Generalizes the fix from #110 so runtime asset loads work under GitHub Pages' subpath.
+  _Merged via #130: `assetUrl(path, base = import.meta.env.BASE_URL)` with injected-base DI for testing; all six call sites migrated so the helper is the sole owner of `BASE_URL` in `src/`._
 
 ---
 
