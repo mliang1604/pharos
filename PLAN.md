@@ -142,7 +142,7 @@ state.
   Single load per URL, dispose when ref count drops to zero. Promise-based API.
   _Merged via #129: generic `AssetManager<T extends Disposable>` with injected loader, in-flight-promise single-flight dedup, ref-counted deterministic dispose-at-zero, and identity-guarded eviction of failed loads. No call sites yet; wired in with #26/#27 test assets._
 
-- 🔲 **[#25](https://github.com/mliang1604/pharos/issues/25)** Loading state UX in the demo app `[ui]`
+- ⏳ **[#25](https://github.com/mliang1604/pharos/issues/25)** Loading state UX in the demo app `[ui]`
   Simple progress bar while a scene loads. Useful for spotting blocking work.
 
 - ✅ **[#26](https://github.com/mliang1604/pharos/issues/26)** Test asset: load the Damaged Helmet glTF `[assets] [docs]`

@@ -12,9 +12,10 @@ import {
   loadGltf,
   gltfSamplerToDescriptor,
   toFloat32,
+  loadTextures,
 } from '@/assets/gltf';
 import type { GltfAccessor, GltfComponentType, GltfJson, GltfPrimitive } from '@/assets/gltfTypes';
-import type { Texture } from '@/gpu/texture';
+import { Texture } from '@/gpu/texture';
 
 // --- Fixture plumbing -------------------------------------------------------
 // Read a real .glb off disk as a standalone ArrayBuffer.
@@ -378,6 +379,40 @@ describe('gltf', () => {
       ) as unknown as typeof fetch;
 
       await expect(loadGltf(createMockDevice(), '/missing.glb')).rejects.toThrow('404');
+    });
+  });
+
+  // Loading progress (#25): loadTextures reports each texture as it resolves so
+  // the demo can drive a progress bar. Mock the GPU/decoder boundary (no real
+  // createImageBitmap or GPU in Node); embedded images keep it fetch-free.
+  describe('loadTextures progress', () => {
+    it('reports onProgress once per texture, climbing to the total', async () => {
+      globalThis.createImageBitmap = vi.fn(() => Promise.resolve({} as ImageBitmap));
+      vi.spyOn(Texture, 'fromImageBitmap').mockReturnValue({} as Texture);
+
+      const json = {
+        textures: [{ source: 0 }, { source: 1 }, { source: 2 }],
+        images: [{ bufferView: 0 }, { bufferView: 1 }, { bufferView: 2 }],
+        bufferViews: [
+          { buffer: 0, byteOffset: 0, byteLength: 1 },
+          { buffer: 0, byteOffset: 1, byteLength: 1 },
+          { buffer: 0, byteOffset: 2, byteLength: 1 },
+        ],
+      } as unknown as GltfJson;
+
+      const calls: Array<[number, number]> = [];
+      const textures = await loadTextures(
+        createMockDevice(),
+        json,
+        [new ArrayBuffer(3)],
+        new URL('http://localhost/'),
+        (loaded, total) => calls.push([loaded, total])
+      );
+
+      expect(textures).toHaveLength(3);
+      expect(calls).toHaveLength(3);
+      expect(calls.map(([loaded]) => loaded).sort()).toEqual([1, 2, 3]); // monotonic
+      expect(calls.every(([, total]) => total === 3)).toBe(true);
     });
   });
 

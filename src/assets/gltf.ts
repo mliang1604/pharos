@@ -81,7 +81,15 @@ const VERTEX_ATTRIBUTES = [
   { semantic: 'TEXCOORD_0', format: 'float32x2', components: 2 },
 ] as const;
 
-export async function loadGltf(device: GPUDevice, url: string): Promise<GltfScene> {
+// Reports texture-load progress as each texture resolves; `total` is the
+// texture count, `loaded` climbs from 1 to `total`.
+export type LoadProgress = (loaded: number, total: number) => void;
+
+export async function loadGltf(
+  device: GPUDevice,
+  url: string,
+  onProgress?: LoadProgress
+): Promise<GltfScene> {
   const response = await fetch(url);
   if (!response.ok) {
     throw new Error(`failed to fetch ${url}: ${response.status}`);
@@ -104,7 +112,7 @@ export async function loadGltf(device: GPUDevice, url: string): Promise<GltfScen
   }
 
   // Build scene
-  const textures = await loadTextures(device, json, buffers, baseUrl);
+  const textures = await loadTextures(device, json, buffers, baseUrl, onProgress);
   return buildScene(device, json, buffers, textures);
 }
 
@@ -428,10 +436,14 @@ export async function loadTextures(
   device: GPUDevice,
   json: GltfJson,
   buffers: ArrayBuffer[],
-  baseUrl: URL
+  baseUrl: URL,
+  onProgress?: LoadProgress
 ): Promise<Texture[]> {
+  const textures = json.textures ?? [];
+  const total = textures.length;
+  let loaded = 0;
   return Promise.all(
-    (json.textures ?? []).map(async (texture) => {
+    textures.map(async (texture) => {
       const image = texture.source !== undefined ? json.images?.[texture.source] : undefined;
       if (image === undefined) {
         throw new Error('texture has no image source');
@@ -441,7 +453,10 @@ export async function loadTextures(
       const bytes = await resolveImageBytes(json, buffers, image, baseUrl);
       const blob = new Blob([bytes], image.mimeType !== undefined ? { type: image.mimeType } : {});
       const bitmap = await createImageBitmap(blob, { colorSpaceConversion: 'none' });
-      return Texture.fromImageBitmap(device, bitmap, gltfSamplerToDescriptor(sampler), false);
+      const result = Texture.fromImageBitmap(device, bitmap, gltfSamplerToDescriptor(sampler), false);
+      loaded += 1;
+      onProgress?.(loaded, total);
+      return result;
     })
   );
 }
