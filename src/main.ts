@@ -12,7 +12,7 @@ import { mat4, vec3, quat, type Mat4 } from '@/math';
 import { Node } from '@/scene/node';
 import { Texture } from '@/gpu/texture';
 import { loadKtx2Texture } from '@/gpu/ktx2';
-import { loadGltf, type GltfScene, type Renderable } from '@/assets/gltf';
+import { loadGltf, type GltfScene, type Renderable, type LoadProgress } from '@/assets/gltf';
 import { assetUrl } from '@/assets/assetUrl';
 
 import cubeShaderCode from '@/materials/shaders/cube.wgsl?raw';
@@ -29,12 +29,25 @@ function requireElement<T extends Element>(selector: string): T {
 
 const canvas = requireElement<HTMLCanvasElement>('#app');
 const statusEl = requireElement<HTMLElement>('#status');
+const progressEl = requireElement<HTMLElement>('#progress');
+const progressFillEl = requireElement<HTMLElement>('#progress-fill');
 
 type StatusTone = 'info' | 'error';
 
 function setStatus(message: string, tone: StatusTone = 'info'): void {
   statusEl.textContent = message;
   statusEl.dataset['tone'] = tone;
+}
+
+// Drive the loading bar from a [0,1] fraction; pass null to hide it.
+function setProgress(fraction: number | null): void {
+  if (fraction === null) {
+    progressEl.hidden = true;
+    return;
+  }
+  progressEl.hidden = false;
+  const clamped = Math.max(0, Math.min(1, fraction));
+  progressFillEl.style.width = `${Math.round(clamped * 100)}%`;
 }
 
 async function initWebGpu(): Promise<GPUDevice | null> {
@@ -432,8 +445,12 @@ async function initScene(device: GPUDevice, context: GPUCanvasContext) {
     label: 'textured shader',
   });
 
-  async function loadModel(url: string, transform: Mat4): Promise<GltfModel> {
-    const scene = await loadGltf(device, url);
+  async function loadModel(
+    url: string,
+    transform: Mat4,
+    onProgress?: LoadProgress
+  ): Promise<GltfModel> {
+    const scene = await loadGltf(device, url, onProgress);
     if (scene.renderables.length === 0) {
       throw new Error(`${url} produced no renderables`);
     }
@@ -482,26 +499,43 @@ async function initScene(device: GPUDevice, context: GPUCanvasContext) {
     }
   }
 
+  // Loading bar over the model texture loads — Sponza's 69 textures are the
+  // bulk of a multi-second load. Each loadModel reports its own model's count.
+  setStatus('Loading scene…');
+  setProgress(0);
+  const sceneProgress: LoadProgress = (loaded, total) => {
+    setProgress(total === 0 ? 1 : loaded / total);
+  };
+
   // Sponza loads as the lone model (its own scene); otherwise the showcase set,
   // placed front-to-back along +Z: the unit Box at z=5, the Duck at z=12, the
   // DamagedHelmet up at y=7. Sponza uses an identity transform (tune in-browser).
   const models: GltfModel[] = isSponza
-    ? [await loadModel(assetUrl('models/Sponza/Sponza.gltf'), mat4.translation([0, 0, 0]))]
+    ? [
+        await loadModel(
+          assetUrl('models/Sponza/Sponza.gltf'),
+          mat4.translation([0, 0, 0]),
+          sceneProgress
+        ),
+      ]
     : [
         await loadModel(
           assetUrl('models/Box.glb'),
-          mat4.multiply(mat4.translation([0, 0, 5]), mat4.scaling([5, 5, 5]))
+          mat4.multiply(mat4.translation([0, 0, 5]), mat4.scaling([5, 5, 5])),
+          sceneProgress
         ),
         await loadModel(
           assetUrl('models/Duck.glb'),
           mat4.multiply(
             mat4.translation([0, 0, 12]),
             mat4.multiply(mat4.scaling([4.8, 4.8, 4.8]), mat4.translation([-0.134, -0.869, 0.037]))
-          )
+          ),
+          sceneProgress
         ),
         await loadModel(
           assetUrl('models/DamagedHelmet.glb'),
-          mat4.multiply(mat4.translation([0, 7, 6]), mat4.scaling([3, 3, 3]))
+          mat4.multiply(mat4.translation([0, 7, 6]), mat4.scaling([3, 3, 3])),
+          sceneProgress
         ),
       ];
 
@@ -578,6 +612,9 @@ async function initScene(device: GPUDevice, context: GPUCanvasContext) {
       row = Math.floor(i / GRID);
     return vec3.fromValues((col - GRID / 2) * SPACING, (row - GRID / 2) * SPACING, 0);
   });
+
+  // Loads done — hide the bar before the first frame.
+  setProgress(null);
 
   startRenderLoop(
     device,
