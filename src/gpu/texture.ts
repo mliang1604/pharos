@@ -5,21 +5,27 @@ export class Texture {
   public readonly texture: GPUTexture;
   public readonly sampler: GPUSampler;
 
+  static DEFAULT_SAMPLER: GPUSamplerDescriptor = {
+    magFilter: 'linear',
+    minFilter: 'linear',
+    mipmapFilter: 'linear',
+    addressModeU: 'repeat',
+    addressModeV: 'repeat',
+  };
+
   private constructor(texture: GPUTexture, sampler: GPUSampler) {
     this.texture = texture;
     this.sampler = sampler;
   }
 
-  static async load(device: GPUDevice, url: string, label?: string): Promise<Texture> {
-    const resource = await fetch(url);
-
-    if (!resource.ok) {
-      throw new Error(`Failed to load texture ${url}: ${resource.status}`);
-    }
-
-    const bitmap = await createImageBitmap(await resource.blob(), { colorSpaceConversion: 'none' });
+  static fromImageBitmap(
+    device: GPUDevice,
+    bitmap: ImageBitmap,
+    samplerDesc: GPUSamplerDescriptor,
+    flipY: boolean,
+    label?: string
+  ): Texture {
     const mipLevelCount = Math.floor(Math.log2(Math.max(bitmap.width, bitmap.height))) + 1;
-
     const format = 'rgba8unorm-srgb';
 
     const texture = device.createTexture({
@@ -33,22 +39,30 @@ export class Texture {
         GPUTextureUsage.RENDER_ATTACHMENT,
     });
 
-    device.queue.copyExternalImageToTexture({ source: bitmap, flipY: true }, { texture }, [
+    device.queue.copyExternalImageToTexture({ source: bitmap, flipY }, { texture }, [
       bitmap.width,
       bitmap.height,
     ]);
 
-    const sampler = device.createSampler({
-      ...(label && { label }),
-      magFilter: 'linear',
-      minFilter: 'linear',
-      mipmapFilter: 'linear',
-      addressModeU: 'repeat',
-      addressModeV: 'repeat',
-    });
+    const sampler = device.createSampler(samplerDesc);
 
     Texture.generateMipmaps(device, texture, format, mipLevelCount);
     return new Texture(texture, sampler);
+  }
+
+  static async load(device: GPUDevice, url: string, label?: string): Promise<Texture> {
+    const resource = await fetch(url);
+
+    if (!resource.ok) {
+      throw new Error(`Failed to load texture ${url}: ${resource.status}`);
+    }
+
+    const bitmap = await createImageBitmap(await resource.blob(), { colorSpaceConversion: 'none' });
+    const samplerDesc = {
+      ...(label && { label }),
+      ...Texture.DEFAULT_SAMPLER,
+    };
+    return Texture.fromImageBitmap(device, bitmap, samplerDesc, true, label);
   }
 
   private static generateMipmaps(

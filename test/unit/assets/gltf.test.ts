@@ -9,8 +9,10 @@ import {
   buildMaterial,
   buildScene,
   loadGltf,
+  gltfSamplerToDescriptor,
 } from '@/assets/gltf';
 import type { GltfPrimitive } from '@/assets/gltfTypes';
+import type { Texture } from '@/gpu/texture';
 
 // --- Fixture plumbing -------------------------------------------------------
 // Read a real .glb off disk as a standalone ArrayBuffer.
@@ -176,7 +178,7 @@ describe('gltf', () => {
     describe('on Box.glb', () => {
       it('yields one root and one renderable, with the mesh node parented to the root', () => {
         const { json, bin } = parseGlb(boxGlb);
-        const scene = buildScene(createMockDevice(), json, bin);
+        const scene = buildScene(createMockDevice(), json, bin, []);
 
         expect(scene.roots).toHaveLength(1);
         expect(scene.renderables).toHaveLength(1);
@@ -193,7 +195,7 @@ describe('gltf', () => {
       if (primitive === undefined) {
         throw new Error('fixture has no primitive');
       }
-      const mat = buildMaterial(json, primitive);
+      const mat = buildMaterial(json, primitive, []);
 
       expect(mat.baseColor[0]).toBeCloseTo(0.8); // baseColorFactor red channel
       expect(mat.baseColor.slice(1)).toEqual([0, 0, 1]); // g, b, a
@@ -207,7 +209,7 @@ describe('gltf', () => {
       if (primitive === undefined) {
         throw new Error('fixture has no primitive');
       }
-      const mat = buildMaterial(json, primitive);
+      const mat = buildMaterial(json, primitive, []);
 
       expect(mat.baseColor).toEqual([1, 1, 1, 1]); // no baseColorFactor → white
       expect(mat.metallic).toBe(0); // Duck specifies metallicFactor: 0
@@ -217,12 +219,58 @@ describe('gltf', () => {
     it('uses the glTF default material when a primitive has none', () => {
       const { json } = parseGlb(boxGlb);
       const primitive: GltfPrimitive = { attributes: {} }; // no material index
-      const mat = buildMaterial(json, primitive);
+      const mat = buildMaterial(json, primitive, []);
 
       // The spec default material: white, fully metallic, fully rough.
       expect(mat.baseColor).toEqual([1, 1, 1, 1]);
       expect(mat.metallic).toBe(1);
       expect(mat.roughness).toBe(1);
+    });
+
+    it('resolves baseColorTexture by index (Duck), leaves it unset when absent (Box)', () => {
+      const fakeTexture = {} as Texture;
+      const duck = parseGlb(duckGlb);
+      const box = parseGlb(boxGlb);
+      const duckPrim = duck.json.meshes[0]?.primitives[0];
+      const boxPrim = box.json.meshes[0]?.primitives[0];
+      if (duckPrim === undefined || boxPrim === undefined) {
+        throw new Error('fixture has no primitive');
+      }
+
+      // Duck's material references baseColorTexture index 0 → resolves to textures[0].
+      expect(buildMaterial(duck.json, duckPrim, [fakeTexture]).baseColorTexture).toBe(fakeTexture);
+      // Box's material has no texture.
+      expect(buildMaterial(box.json, boxPrim, [fakeTexture]).baseColorTexture).toBeUndefined();
+    });
+  });
+
+  describe('gltfSamplerToDescriptor', () => {
+    it('defaults sensibly when the sampler is absent', () => {
+      const d = gltfSamplerToDescriptor(undefined);
+      expect(d.addressModeU).toBe('repeat');
+      expect(d.minFilter).toBe('linear');
+      expect(d.mipmapFilter).toBe('linear');
+    });
+
+    it('defaults each field the sampler omits', () => {
+      const d = gltfSamplerToDescriptor({});
+      expect(d.magFilter).toBe('linear');
+      expect(d.addressModeU).toBe('repeat');
+      expect(d.addressModeV).toBe('repeat');
+    });
+
+    it('maps GL enums, splitting minFilter into min + mipmap', () => {
+      const d = gltfSamplerToDescriptor({
+        magFilter: 9728, // NEAREST
+        minFilter: 9986, // NEAREST_MIPMAP_LINEAR → min nearest, mipmap linear
+        wrapS: 33071, // CLAMP_TO_EDGE
+        wrapT: 33648, // MIRRORED_REPEAT
+      });
+      expect(d.magFilter).toBe('nearest');
+      expect(d.minFilter).toBe('nearest');
+      expect(d.mipmapFilter).toBe('linear');
+      expect(d.addressModeU).toBe('clamp-to-edge');
+      expect(d.addressModeV).toBe('mirror-repeat');
     });
   });
 
@@ -257,7 +305,7 @@ describe('gltf', () => {
   describe('Duck.glb (second-fixture regression)', () => {
     it('assembles one nested renderable from a multi-node scene', () => {
       const { json, bin } = parseGlb(duckGlb);
-      const scene = buildScene(createMockDevice(), json, bin);
+      const scene = buildScene(createMockDevice(), json, bin, []);
 
       expect(scene.roots).toHaveLength(1);
       expect(scene.renderables).toHaveLength(1);

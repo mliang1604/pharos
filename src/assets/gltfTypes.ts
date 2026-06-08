@@ -7,6 +7,7 @@ export interface GltfMaterial {
     baseColorFactor?: number[];
     metallicFactor?: number;
     roughnessFactor?: number;
+    baseColorTexture?: { index: number; texCoord?: number };
   };
 }
 
@@ -17,6 +18,9 @@ export interface GltfJson {
   nodes: GltfNode[];
   meshes: GltfMesh[];
   materials?: GltfMaterial[];
+  textures?: GltfTexture[];
+  images?: GltfImage[];
+  samplers?: GltfSampler[];
   accessors: GltfAccessor[];
   bufferViews: GltfBufferView[];
   buffers: GltfBuffer[];
@@ -76,6 +80,22 @@ export interface GltfBufferView {
 export interface GltfBuffer {
   uri?: string;
   byteLength: number;
+}
+
+export interface GltfTexture {
+  source?: number; // index into images
+  sampler?: number; // index into samplers
+}
+export interface GltfImage {
+  bufferView?: number; // embedded image bytes (the .glb case)
+  mimeType?: string;
+  uri?: string; // external/data-URI — deferred, but model it
+}
+export interface GltfSampler {
+  magFilter?: number;
+  minFilter?: number;
+  wrapS?: number;
+  wrapT?: number;
 }
 
 export interface GltfSceneDef {

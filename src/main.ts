@@ -14,6 +14,7 @@ import { loadGltf, type GltfScene } from '@/assets/gltf';
 
 import cubeShaderCode from '@/materials/shaders/cube.wgsl?raw';
 import normalsShaderCode from '@/materials/shaders/normals.wgsl?raw';
+import texturedShaderCode from '@/materials/shaders/textured.wgsl?raw';
 
 function requireElement<T extends Element>(selector: string): T {
   const el = document.querySelector<T>(selector);
@@ -417,6 +418,11 @@ async function initScene(device: GPUDevice, context: GPUCanvasContext) {
   // of scope until #21/#22). Each model gets its own MVP uniform + material so
   // they don't alias each other.
   const normalsShader = new Shader({ device, code: normalsShaderCode, label: 'normals shader' });
+  const texturedShader = new Shader({
+    device,
+    code: texturedShaderCode,
+    label: 'textured shaded ',
+  });
 
   async function loadModel(url: string, transform: Mat4): Promise<GltfModel> {
     const scene = await loadGltf(device, url);
@@ -425,16 +431,39 @@ async function initScene(device: GPUDevice, context: GPUCanvasContext) {
       throw new Error(`${url} produced no renderables`);
     }
     const mvp = new UniformBuffer(device, 64, `${url} mvp`); // one mat4x4<f32>
-    const bindGroupLayout = device.createBindGroupLayout({
+
+    let bindGroupLayout = device.createBindGroupLayout({
       label: `${url} bind group layout`,
       entries: [{ binding: 0, visibility: GPUShaderStage.VERTEX, buffer: { type: 'uniform' } }],
     });
+    let shader = normalsShader;
+    let entries: GPUBindGroupEntry[] = [{ binding: 0, resource: { buffer: mvp.buffer } }];
+
+    if (first.material.baseColorTexture !== undefined) {
+      shader = texturedShader;
+      bindGroupLayout = device.createBindGroupLayout({
+        label: `${url} bind group layout`,
+        entries: [
+          { binding: 0, visibility: GPUShaderStage.VERTEX, buffer: { type: 'uniform' } },
+          { binding: 1, visibility: GPUShaderStage.FRAGMENT, texture: {} },
+          { binding: 2, visibility: GPUShaderStage.FRAGMENT, sampler: {} },
+        ],
+      });
+
+      const texture = first.material.baseColorTexture; // the Texture | undefined — you've already checked it's defined in this branch
+      entries = [
+        { binding: 0, resource: { buffer: mvp.buffer } },
+        { binding: 1, resource: texture.texture.createView() }, // GPUTexture → a view
+        { binding: 2, resource: texture.sampler }, // the GPUSampler
+      ];
+    }
+
     const material = new Material({
       device,
-      shader: normalsShader,
+      shader: shader,
       vertexBufferLayouts: [first.mesh.vertexBufferLayout],
       targets: [{ format }],
-      entries: [{ binding: 0, resource: { buffer: mvp.buffer } }],
+      entries: entries,
       depthStencil: { depthWriteEnabled: true, depthCompare: 'less', format: 'depth24plus' },
       label: `${url} material`,
       bindGroupLayout,
