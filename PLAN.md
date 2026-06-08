@@ -112,7 +112,7 @@ state.
 
 ---
 
-## Phase 2 — Asset Pipeline · ⏳ in progress (8/10 merged)
+## Phase 2 — Asset Pipeline · ⏳ in progress (9/10 merged)
 
 **Milestone goal:** Load real-world assets — glTF scenes with KTX2 textures — through a managed loader.
 
@@ -149,8 +149,9 @@ state.
   Industry-standard PBR test asset. Should render with placeholder shading; PBR comes in Phase 4.
   _Merged via #131: vendored canonical `DamagedHelmet.glb`, loaded with one `loadModel` entry (no engine changes — loader skips unmodeled attributes, binds baseColor only). Placeholder shading; not yet routed through AssetManager (#27 does that)._
 
-- 🔲 **[#27](https://github.com/mliang1604/pharos/issues/27)** Test asset: load the Sponza scene `[assets]`
+- ✅ **[#27](https://github.com/mliang1604/pharos/issues/27)** Test asset: load the Sponza scene `[assets]`
   Larger scene to validate draw-call performance and asset memory.
+  _Merged via #135: vendored canonical Sponza (~50 MB, the first real `.gltf` consumer). Per-renderable materials (loadModel → `Material[]`, bound per primitive); a 4-byte `writeBuffer` padding fix surfaced by odd `Uint16` index counts; a `?scene=sponza` startup selector + camera preset. AssetManager wiring deferred (#133); pipeline caching deferred (#134)._
 
 - ✅ **[#112](https://github.com/mliang1604/pharos/issues/112)** Centralize base-path-correct asset URLs (assetUrl helper) `[architecture] [assets]` ➕ added
   A helper that resolves asset URLs against the deploy base path. Generalizes the fix from #110 so runtime asset loads work under GitHub Pages' subpath.
@@ -390,5 +391,11 @@ the plan still accounts for them.
 
 - 🔲 **[#127](https://github.com/mliang1604/pharos/issues/127)** glTF KTX2 textures via the KHR_texture_basisu extension `[assets]` ⚠ no milestone
   Follow-up to #23: resolve `texture.extensions.KHR_texture_basisu.source` and route `image/ktx2` through `loadKtx2Texture`, with a KTX2-textured glTF test asset.
+
+- 🔲 **[#133](https://github.com/mliang1604/pharos/issues/133)** Live scene toggle: switch scenes at runtime (per-scene builders + teardown) `[tooling]` ➕ added · ⚠ no milestone
+  Follow-up to #27: decompose `initScene` into per-scene builders + scene teardown (the first real `AssetManager` release-path use), so scenes can swap at runtime rather than only at page load.
+
+- 🔲 **[#134](https://github.com/mliang1604/pharos/issues/134)** Cache render pipelines across identical primitives `[rendering]` ➕ added · ⚠ no milestone
+  Follow-up to #27: `loadModel` builds one pipeline per renderable (~103 for Sponza); cache by (shader, layout, targets) so repeated primitives reuse one.
 
 ---

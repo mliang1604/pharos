@@ -529,4 +529,19 @@ describe('gltf', () => {
       expect(buildMaterial(json, primitive, [fakeTexture]).baseColorTexture).toBe(fakeTexture);
     });
   });
+
+  // The Sponza atrium (#27): a .gltf with an external .bin and 69 textures —
+  // 103 primitives / 25 materials under one node. The first shipped asset to
+  // exercise the #117 .gltf path end to end: parse the manifest, read the
+  // external buffer, and assemble every primitive (no GPU / no textures needed).
+  describe('Sponza.gltf (shipped-asset regression)', () => {
+    it('assembles all 103 primitives from the external .bin', () => {
+      const json = parseGltf(loadGlbFixture('../../../public/models/Sponza/Sponza.gltf'));
+      const bin = loadGlbFixture('../../../public/models/Sponza/Sponza.bin');
+
+      const scene = buildScene(createMockDevice(), json, [bin], []);
+
+      expect(scene.renderables).toHaveLength(103);
+    });
+  });
 });
