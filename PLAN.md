@@ -112,7 +112,7 @@ state.
 
 ---
 
-## Phase 2 — Asset Pipeline · ⏳ in progress (9/10 merged)
+## Phase 2 — Asset Pipeline · ✅ complete (10/10 merged)
 
 **Milestone goal:** Load real-world assets — glTF scenes with KTX2 textures — through a managed loader.
 
@@ -142,8 +142,9 @@ state.
   Single load per URL, dispose when ref count drops to zero. Promise-based API.
   _Merged via #129: generic `AssetManager<T extends Disposable>` with injected loader, in-flight-promise single-flight dedup, ref-counted deterministic dispose-at-zero, and identity-guarded eviction of failed loads. No call sites yet; wired in with #26/#27 test assets._
 
-- ⏳ **[#25](https://github.com/mliang1604/pharos/issues/25)** Loading state UX in the demo app `[ui]`
+- ✅ **[#25](https://github.com/mliang1604/pharos/issues/25)** Loading state UX in the demo app `[ui]`
   Simple progress bar while a scene loads. Useful for spotting blocking work.
+  _Merged via #136: optional `onProgress(loaded, total)` threaded `loadGltf` → `loadTextures` (per-texture granularity, the only honest signal for Sponza's single-await load), driving a `#progress` bar via `setProgress(fraction | null)`._
 
 - ✅ **[#26](https://github.com/mliang1604/pharos/issues/26)** Test asset: load the Damaged Helmet glTF `[assets] [docs]`
   Industry-standard PBR test asset. Should render with placeholder shading; PBR comes in Phase 4.
